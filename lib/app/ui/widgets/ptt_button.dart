@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../state/app_controller.dart';
@@ -6,7 +8,10 @@ import 'pulsing_dot.dart';
 
 /// Massive tactical PTT button with concentric radar rings and glow states.
 class PttButton extends StatefulWidget {
-  const PttButton({super.key, required this.controller});
+  const PttButton({
+    super.key,
+    required this.controller,
+  });
 
   final AppController controller;
 
@@ -16,6 +21,22 @@ class PttButton extends StatefulWidget {
 
 class _PttButtonState extends State<PttButton> {
   bool _pressed = false;
+
+  void _handlePressChanged(bool pressed) {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _pressed = pressed;
+    });
+
+    if (pressed) {
+      unawaited(widget.controller.startPushToTalk());
+    } else {
+      unawaited(widget.controller.stopPushToTalk());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,14 +59,11 @@ class _PttButtonState extends State<PttButton> {
         children: <Widget>[
           const _TopWatermark(),
           const SizedBox(height: 12),
-          _RingCore(active: active, pressed: _pressed, onPressChanged: (p) {
-            setState(() => _pressed = p);
-            if (p) {
-              widget.controller.startPushToTalk();
-            } else {
-              widget.controller.stopPushToTalk();
-            }
-          }),
+          _RingCore(
+            active: active,
+            pressed: _pressed,
+            onPressChanged: _handlePressChanged,
+          ),
           const SizedBox(height: 12),
           const _ChannelBar(),
         ],
@@ -86,11 +104,16 @@ class _TopWatermark extends StatelessWidget {
         ),
         Row(
           children: <Widget>[
-            const PulsingDot(color: AppColors.tertiary, size: 6),
+            const PulsingDot(
+              color: AppColors.tertiary,
+              size: 6,
+            ),
             const SizedBox(width: 6),
             Text(
               'TX READY',
-              style: AppTypography.labelCaps.copyWith(color: AppColors.tertiary),
+              style: AppTypography.labelCaps.copyWith(
+                color: AppColors.tertiary,
+              ),
             ),
           ],
         ),
@@ -118,8 +141,10 @@ class _RingCoreState extends State<_RingCore> {
   bool _engaged = false;
 
   void _setEngaged(bool value) {
-    if (_engaged != value) {
-      setState(() => _engaged = value);
+    if (_engaged != value && mounted) {
+      setState(() {
+        _engaged = value;
+      });
     }
   }
 
@@ -158,25 +183,34 @@ class _RingCoreState extends State<_RingCore> {
                     .withValues(alpha: 0.1),
               ),
             ),
+
+            // IMPORTANT:
+            // Start recording immediately on finger-down.
+            // Do NOT use onLongPressStart here.
             GestureDetector(
-              onTapDown: (_) => _setEngaged(true),
-              onTapUp: (_) => _setEngaged(false),
-              onTapCancel: () => _setEngaged(false),
-              onLongPressStart: (_) {
+              behavior: HitTestBehavior.opaque,
+
+              onTapDown: (_) {
+                _setEngaged(true);
                 widget.onPressChanged(true);
               },
-              onLongPressEnd: (_) {
+
+              onTapUp: (_) {
                 widget.onPressChanged(false);
                 _setEngaged(false);
               },
-              onLongPressCancel: () {
+
+              onTapCancel: () {
                 widget.onPressChanged(false);
                 _setEngaged(false);
               },
+
               child: AnimatedScale(
                 scale: widget.pressed ? 0.96 : 1.0,
                 duration: const Duration(milliseconds: 120),
-                child: _CoreBody(active: active),
+                child: _CoreBody(
+                  active: active,
+                ),
               ),
             ),
           ],
@@ -187,7 +221,9 @@ class _RingCoreState extends State<_RingCore> {
 }
 
 class _CoreBody extends StatelessWidget {
-  const _CoreBody({required this.active});
+  const _CoreBody({
+    required this.active,
+  });
 
   final bool active;
 
@@ -195,7 +231,9 @@ class _CoreBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color accent =
         active ? AppColors.primaryContainer : AppColors.tertiary;
-    final Color fg = active ? AppColors.onPrimaryContainer : AppColors.onSurface;
+
+    final Color fg =
+        active ? AppColors.onPrimaryContainer : AppColors.onSurface;
 
     return Container(
       width: 144,
@@ -218,7 +256,9 @@ class _CoreBody extends StatelessWidget {
         boxShadow: active
             ? <BoxShadow>[
                 BoxShadow(
-                  color: AppColors.primaryContainer.withValues(alpha: 0.8),
+                  color: AppColors.primaryContainer.withValues(
+                    alpha: 0.8,
+                  ),
                   blurRadius: 24,
                 ),
               ]
@@ -277,7 +317,11 @@ class _ChannelBar extends StatelessWidget {
       children: <Widget>[
         Row(
           children: <Widget>[
-            const Icon(Icons.sensors, size: 16, color: AppColors.primary),
+            const Icon(
+              Icons.sensors,
+              size: 16,
+              color: AppColors.primary,
+            ),
             const SizedBox(width: 4),
             Text(
               'CHANNEL 01',
@@ -298,20 +342,26 @@ class _ChannelBar extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Row(
-              children: List<Widget>.generate(5, (int i) {
-                final bool lit = i < 3;
-                return Container(
-                  width: 6,
-                  height: 12,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(
-                    color: lit
-                        ? AppColors.tertiary
-                        : AppColors.tertiary.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                );
-              }),
+              children: List<Widget>.generate(
+                5,
+                (int i) {
+                  final bool lit = i < 3;
+
+                  return Container(
+                    width: 6,
+                    height: 12,
+                    margin: const EdgeInsets.symmetric(horizontal: 1),
+                    decoration: BoxDecoration(
+                      color: lit
+                          ? AppColors.tertiary
+                          : AppColors.tertiary.withValues(
+                              alpha: 0.3,
+                            ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
