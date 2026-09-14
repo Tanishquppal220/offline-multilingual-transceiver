@@ -1,4 +1,78 @@
 {
+  "default_engine": "conformer",
+  "engines": {
+    "conformer": {
+      "languages": {
+        "en": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/en/model.int8.onnx",
+          "tokens": "assets/models/stt/en/tokens.txt"
+        },
+        "hi": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/hi/model.int8.onnx",
+          "tokens": "assets/models/stt/hi/tokens.txt"
+        },
+        "gu": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/gu/model.int8.onnx",
+          "tokens": "assets/models/stt/gu/tokens.txt"
+        },
+        "mr": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/mr/model.int8.onnx",
+          "tokens": "assets/models/stt/mr/tokens.txt"
+        },
+        "kn": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/kn/model.int8.onnx",
+          "tokens": "assets/models/stt/kn/tokens.txt"
+        },
+        "ml": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/ml/model.int8.onnx",
+          "tokens": "assets/models/stt/ml/tokens.txt"
+        },
+        "ta": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/ta/model.int8.onnx",
+          "tokens": "assets/models/stt/ta/tokens.txt"
+        },
+        "te": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/te/model.int8.onnx",
+          "tokens": "assets/models/stt/te/tokens.txt"
+        },
+        "bn": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/bn/model.int8.onnx",
+          "tokens": "assets/models/stt/bn/tokens.txt"
+        },
+        "or": {
+          "type": "nemo_ctc",
+          "model": "assets/models/stt/or/model.int8.onnx",
+          "tokens": "assets/models/stt/or/tokens.txt"
+        }
+      }
+    },
+    "whisper": {
+      "multilingual": true,
+      "languages": {
+        "all": {
+          "type": "whisper",
+          "encoder": "assets/models/stt/whisper/tiny-encoder.int8.onnx",
+          "decoder": "assets/models/stt/whisper/tiny-decoder.int8.onnx",
+          "tokens": "assets/models/stt/whisper/tiny-tokens.txt"
+        },
+        "en": {
+          "type": "whisper",
+          "encoder": "assets/models/stt/whisper/tiny-encoder.int8.onnx",
+          "decoder": "assets/models/stt/whisper/tiny-decoder.int8.onnx",
+          "tokens": "assets/models/stt/whisper/tiny-tokens.txt"
+        }
+      }
+    }
+  },
   "languages": {
     "en": {
       "type": "nemo_ctc",
@@ -52,4 +126,3 @@
     }
   }
 }
-

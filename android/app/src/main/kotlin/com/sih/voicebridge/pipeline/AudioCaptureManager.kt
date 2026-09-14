@@ -12,8 +12,44 @@ data class AudioFrame(
     val samples: ShortArray,
     val sampleRate: Int,
     val timestampMs: Long,
-    val readAtEpochMs: Long = timestampMs,
 )
+
+/**
+ * Adaptive software AGC: fast-attack, slow-decay gain normalizer.
+ * Scales raw microphone audio to a consistent peak level (~22,000 / 32,767 ≈ -3.5 dBFS).
+ * This compensates for quiet mic levels on Android devices where raw input peaks at only
+ * 1,500–4,000 out of 32,767, causing faint syllables to fall below the STT model's
+ * log-mel filterbank threshold.
+ */
+class AudioNormalizer {
+    private var currentGain = 1.0f
+
+    fun process(samples: ShortArray): ShortArray {
+        var maxVal = 0
+        for (sample in samples) {
+            val abs = kotlin.math.abs(sample.toInt())
+            if (abs > maxVal) maxVal = abs
+        }
+
+        // Target peak: ~22,000 out of 32,767 (~ -3.5 dBFS)
+        val targetGain = if (maxVal > 500) {
+            (22000.0f / maxVal).coerceIn(1.0f, 6.0f)
+        } else {
+            currentGain // Frame is near-silence, hold current gain
+        }
+
+        // Smooth transition: fast attack (0.3), slow decay (0.05)
+        val alpha = if (targetGain < currentGain) 0.3f else 0.05f
+        currentGain = (currentGain * (1.0f - alpha)) + (targetGain * alpha)
+
+        val boosted = ShortArray(samples.size)
+        for (i in samples.indices) {
+            val amplified = (samples[i] * currentGain).toInt()
+            boosted[i] = amplified.coerceIn(-32767, 32767).toShort()
+        }
+        return boosted
+    }
+}
 
 class AudioCaptureManager {
     companion object {
@@ -26,6 +62,7 @@ class AudioCaptureManager {
 
     private val readExecutor = Executors.newSingleThreadExecutor()
     private val capturing = AtomicBoolean(false)
+    private val normalizer = AudioNormalizer()
     @Volatile private var stopSignal: AtomicBoolean? = null
 
     val isCapturing: Boolean get() = capturing.get()
@@ -35,12 +72,24 @@ class AudioCaptureManager {
         stopRequested: AtomicBoolean,
         onFrame: (AudioFrame) -> Boolean,
         onError: (String) -> Unit,
-        onCompleted: (Map<String, Any?>) -> Unit,
-    ) {
-        check(!capturing.get()) { "Microphone is already recording" }
-        val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, ENCODING)
-        check(minBufferSize > 0) { "AudioRecord min buffer size unavailable: $minBufferSize" }
-        val bufferSize = max(minBufferSize, FRAME_SIZE * BYTES_PER_SAMPLE * 4)
+    ): Boolean {
+        if (capturing.get()) {
+            return true
+        }
+
+        val minBufferSize = AudioRecord.getMinBufferSize(
+            SAMPLE_RATE,
+            CHANNEL_CONFIG,
+            ENCODING,
+        )
+
+        if (minBufferSize <= 0) {
+            onError("AudioRecord min buffer size unavailable: $minBufferSize")
+            return false
+        }
+
+        // Expand buffer size to at least 2 seconds (64KB) to prevent buffer overrun
+        val bufferSize = max(minBufferSize * 4, SAMPLE_RATE * 4)
         val record = AudioRecord(
             MediaRecorder.AudioSource.VOICE_RECOGNITION,
             SAMPLE_RATE, CHANNEL_CONFIG, ENCODING, bufferSize,
@@ -63,70 +112,48 @@ class AudioCaptureManager {
                 var firstFrameAt: Long? = null
                 var failure: String? = null
                 val frameBuffer = ShortArray(FRAME_SIZE)
-
-                fun readFrame(readMode: Int): Boolean {
-                    val samplesRead = record.read(frameBuffer, 0, frameBuffer.size, readMode)
-                    if (samplesRead < 0) error("AudioRecord read error: $samplesRead")
-                    if (samplesRead == 0) return false
-                    val readAt = System.currentTimeMillis()
-                    if (firstFrameAt == null) firstFrameAt = readAt
-                    val frame = AudioFrame(
-                        samples = frameBuffer.copyOf(samplesRead),
-                        sampleRate = SAMPLE_RATE,
-                        timestampMs = recordingStartedAt + levels.samples * 1000L / SAMPLE_RATE,
-                        readAtEpochMs = readAt,
-                    )
-                    levels.add(frame.samples)
-                    check(onFrame(frame)) { "Audio queue exceeded its 5-second limit; capture aborted, not truncated" }
-                    queuedSamples += samplesRead
-                    return true
+                while (capturing.get()) {
+                    val samplesRead = record.read(frameBuffer, 0, frameBuffer.size)
+                    if (samplesRead > 0) {
+                        val normalized = normalizer.process(frameBuffer.copyOf(samplesRead))
+                        onFrame(
+                            AudioFrame(
+                                samples = normalized,
+                                sampleRate = SAMPLE_RATE,
+                                timestampMs = System.currentTimeMillis(),
+                            ),
+                        )
+                    } else if (samplesRead < 0) {
+                        onError("AudioRecord read error: $samplesRead")
+                        break
+                    }
                 }
-
-                try {
-                    while (!stopRequested.get()) readFrame(AudioRecord.READ_BLOCKING)
-                    val maxDrainReads = (actualBufferSizeFrames / FRAME_SIZE + 2).coerceAtMost(100)
-                    var drained = false
-                    for (drainIndex in 0 until maxDrainReads) {
-                        if (!readFrame(AudioRecord.READ_NON_BLOCKING)) {
-                            drained = true
-                            break
-                        }
-                    }
-                    check(drained) { "Microphone drain limit exceeded; utterance discarded, not truncated" }
-                } catch (error: Throwable) {
-                    failure = error.message ?: error.javaClass.simpleName
-                    onError(failure)
-                } finally {
-                    try {
-                        record.stop()
-                    } catch (error: Throwable) {
-                        if (failure == null) {
-                            failure = "AudioRecord stop failed: ${error.message}"
-                            onError(failure)
-                        }
-                    } finally {
-                        record.release()
-                        capturing.set(false)
-                        stopSignal = null
-                    }
-                    onCompleted(levels.toMap(SAMPLE_RATE) + mapOf(
-                        "capturedSamples" to levels.samples,
-                        "queuedSamples" to queuedSamples,
-                        "capturedDurationMs" to levels.samples * 1000.0 / SAMPLE_RATE,
-                        "recordingStartedEpochMs" to recordingStartedAt,
-                        "firstFrameEpochMs" to firstFrameAt,
-                        "captureFinishedEpochMs" to System.currentTimeMillis(),
-                        "sampleRate" to actualSampleRate,
-                        "bufferSizeBytes" to bufferSize,
-                        "actualBufferSizeFrames" to actualBufferSizeFrames,
-                        "captureError" to failure,
-                    ))
+            } catch (error: Throwable) {
+                if (capturing.get()) {
+                    onError("Audio capture failure: ${error.message}")
                 }
             }
-        } catch (error: Throwable) {
-            capturing.set(false)
-            stopSignal = null
-            runCatching { record.stop() }
+        }
+
+        return true
+    }
+
+    fun stop() {
+        if (!capturing.getAndSet(false)) {
+            return
+        }
+
+        readTask?.cancel(true)
+        readTask = null
+
+        val record = audioRecord
+        audioRecord = null
+
+        if (record != null) {
+            try {
+                record.stop()
+            } catch (_: IllegalStateException) {
+            }
             record.release()
             throw error
         }

@@ -51,6 +51,76 @@ class TelemetryScreen extends StatelessWidget {
                 color: AppColors.tertiary,
               ),
             ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.outline),
+              ),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    controller.selectedSttEngine == 'whisper'
+                        ? Icons.auto_awesome
+                        : Icons.bolt,
+                    size: 20,
+                    color: AppColors.secondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'ACTIVE AI ENGINE',
+                          style: AppTypography.labelCaps.copyWith(
+                            color: AppColors.outlineVariant,
+                            fontSize: 9,
+                          ),
+                        ),
+                        Text(
+                          controller.selectedSttEngine == 'whisper'
+                              ? 'OpenAI Whisper (Multilingual Tiny)'
+                              : 'NeMo Conformer-CTC (int8)',
+                          style: AppTypography.bodyLg.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.secondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      final String next = controller.selectedSttEngine == 'whisper'
+                          ? 'conformer'
+                          : 'whisper';
+                      controller.setSttEngine(next);
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.secondary),
+                      ),
+                      child: Text(
+                        'SWAP',
+                        style: AppTypography.labelCaps.copyWith(
+                          color: AppColors.secondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             const _SectionTitle('LATENCY (T0..T6)'),
             const SizedBox(height: 8),

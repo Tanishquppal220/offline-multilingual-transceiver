@@ -13,3 +13,5 @@ coverage/
 
 .gradle-home/
 .tmp-appdata/
+tool/.venv/
+.venv/

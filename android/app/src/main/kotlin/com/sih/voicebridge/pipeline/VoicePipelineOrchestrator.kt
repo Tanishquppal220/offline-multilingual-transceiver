@@ -42,53 +42,120 @@ class VoicePipelineOrchestrator(
     private val ttsEngine = TtsEngine(appContext, emitEvent, ::emitStatus)
     private val resourceMonitor = ResourceMonitor(appContext, emitEvent)
     private val pipelineExecutor = Executors.newSingleThreadExecutor()
-    private val frameQueue = BoundedAudioFrameQueue(pipelineExecutor)
-    private val captureRequest = AtomicReference<CaptureRequest?>(null)
-    private val disposed = AtomicBoolean(false)
-    private var initialized = false
-    private var resourcesClosed = false
-    private var languageCode = "en"
-    private var mode = "walkie_talkie"
-    private var pendingLanguage: String? = null
 
-    fun initialize(languageCode: String) {
-        if (disposed.get()) return
+    private var languageCode: String = "en"
+    private var mode: String = "walkie_talkie"
+    private var activeMessageId: String? = null
+
+    private val listening = AtomicBoolean(false)
+    private val initialized = AtomicBoolean(false)
+
+    private var pttMode = true
+    private val preSpeechRingBuffer = java.util.ArrayDeque<AudioFrame>(18)
+    private var inSpeechState = false
+    private var consecutiveSilenceFrames = 0
+    private val maxSilenceFramesForWhisper = 15 // 300ms at 20ms/frame
+    private val utteranceAudioBuffer = java.io.ByteArrayOutputStream()
+
+    fun initialize(languageCode: String, engineType: String = "conformer") {
+        this.languageCode = languageCode
+
+        emitStatus("Initializing voice pipelines ($engineType)...")
+
         pipelineExecutor.execute {
-            if (disposed.get()) return@execute
             try {
-                configureLanguage(languageCode)
+                /*
+                 * STT model/backend initialization.
+                 * This can involve asset/model loading, so it stays
+                 * on the background executor.
+                 */
+                sttEngine.initialize(languageCode, engineType)
+
+                /*
+                 * Model-size calculation can scan files and therefore
+                 * also stays away from the UI thread.
+                 */
+                val sttSize = sttEngine.currentModelSizeMb()
+                val ttsSize = ttsEngine.currentModelSizeMb(languageCode)
+
+                resourceMonitor.setPhase(ResourcePhase.IDLE)
+
+                resourceMonitor.updateModelSizes(
+                    sttModelSizeMb = sttSize,
+                    ttsModelSizeMb = ttsSize,
+                )
+
                 resourceMonitor.start()
-                initialized = true
-                emitStatus(if (sttEngine.recognitionAvailable) "Voice pipelines ready for $languageCode"
-                    else "STT unavailable; typed communication and TTS remain available")
+
+                initialized.set(true)
+
+                emitEvent(
+                    mapOf(
+                        "type" to "status",
+                        "text" to "Pipelines ready for $languageCode (${sttEngine.backendName})",
+                    ),
+                )
             } catch (error: Throwable) {
-                emitError("Pipeline initialization failed: ${error.message}")
+                initialized.set(false)
+
+                emitError(
+                    "Pipeline initialization failed: ${error.message ?: error.javaClass.simpleName}"
+                )
             }
         }
     }
 
-    private fun configureLanguage(code: String) {
-        languageCode = code
-        sttEngine.setLanguage(code)
-        resourceMonitor.updateModelSizes(sttEngine.currentModelSizeMb(), ttsEngine.currentModelSizeMb(code))
-        emitEvent(mapOf(
-            "type" to "stt_ready", "available" to sttEngine.recognitionAvailable,
-            "fallback" to !sttEngine.recognitionAvailable, "languageCode" to code,
-            "text" to if (sttEngine.recognitionAvailable) "STT ready for $code"
-                else "STT UNAVAILABLE for $code; fallback transcripts are disabled",
-        ))
+    fun setSttEngine(engineType: String) {
+        pipelineExecutor.execute {
+            try {
+                sttEngine.setEngineType(engineType)
+
+                val sttSize = sttEngine.currentModelSizeMb()
+                val ttsSize = ttsEngine.currentModelSizeMb(languageCode)
+
+                resourceMonitor.updateModelSizes(
+                    sttModelSizeMb = sttSize,
+                    ttsModelSizeMb = ttsSize,
+                )
+
+                emitEvent(
+                    mapOf(
+                        "type" to "status",
+                        "text" to "STT engine switched to $engineType (${sttEngine.backendName})",
+                    ),
+                )
+            } catch (error: Throwable) {
+                emitError(
+                    "STT engine switch failed: ${error.message ?: error.javaClass.simpleName}"
+                )
+            }
+        }
     }
 
     fun setLanguage(languageCode: String) {
         if (disposed.get()) return
         pipelineExecutor.execute {
-            if (disposed.get()) return@execute
-            if (captureRequest.get() != null) {
-                pendingLanguage = languageCode
-                emitStatus("Language change queued until recording finishes")
-            } else {
-                runCatching { configureLanguage(languageCode) }
-                    .onFailure { emitError("Language switch failed: ${it.message}") }
+            try {
+                this.languageCode = languageCode
+
+                /*
+                 * Language/model switching can also be expensive.
+                 */
+                sttEngine.setLanguage(languageCode)
+
+                val sttSize = sttEngine.currentModelSizeMb()
+                val ttsSize = ttsEngine.currentModelSizeMb(languageCode)
+
+                resourceMonitor.updateModelSizes(
+                    sttModelSizeMb = sttSize,
+                    ttsModelSizeMb = ttsSize,
+                )
+
+                emitStatus("Language switched to $languageCode (${sttEngine.backendName})")
+            } catch (error: Throwable) {
+                emitError(
+                    "Language switch failed: ${error.message ?: error.javaClass.simpleName}"
+                )
             }
         }
     }
@@ -116,21 +183,48 @@ class VoicePipelineOrchestrator(
             emitError("Previous recording is still recording or finalizing", capture)
             return
         }
+
+        pttMode = ptt
+        inSpeechState = ptt
+        preSpeechRingBuffer.clear()
+        consecutiveSilenceFrames = 0
+        synchronized(utteranceAudioBuffer) {
+            utteranceAudioBuffer.reset()
+        }
+        activeMessageId =
+            messageId ?: "native-${System.currentTimeMillis()}"
+
+        vadProcessor.reset()
+
+        /*
+         * Session creation may initialize native STT objects.
+         * Keep it away from the UI thread.
+         */
         pipelineExecutor.execute {
             try {
                 if (disposed.get() || capture.stopRequested.get()) {
                     completeWithoutRecording(capture)
                     return@execute
                 }
-                check(initialized) { "Voice pipelines are still initializing" }
-                check(hasRecordPermission()) { "RECORD_AUDIO permission not granted" }
-                if (requestedLanguage != null && requestedLanguage != languageCode) configureLanguage(requestedLanguage)
-                check(sttEngine.recognitionAvailable) { "STT unavailable; no fallback transcript will be sent" }
-                capture.languageCode = languageCode
-                vadProcessor.reset()
-                if (capture.ptt) beginUtterance(capture)
-                if (capture.stopRequested.get()) {
-                    completeWithoutRecording(capture)
+
+                sttEngine.beginSession()
+                listening.set(true)
+
+                resourceMonitor.setPhase(ResourcePhase.STT)
+
+                val started = audioCaptureManager.start(
+                    onFrame = ::handleAudioFrame,
+                    onError = ::handleAudioError,
+                )
+
+                if (!started) {
+                    listening.set(false)
+                    inSpeechState = false
+                    preSpeechRingBuffer.clear()
+                    sttEngine.resetSession()
+                    resourceMonitor.setPhase(ResourcePhase.IDLE)
+
+                    emitError("Unable to start microphone capture")
                     return@execute
                 }
                 resourceMonitor.setPhase(ResourcePhase.STT)
@@ -156,138 +250,157 @@ class VoicePipelineOrchestrator(
                     },
                 )
             } catch (error: Throwable) {
-                failCapture(capture, error.message ?: error.javaClass.simpleName)
-                completeWithoutRecording(capture)
+                listening.set(false)
+                inSpeechState = false
+                preSpeechRingBuffer.clear()
+                sttEngine.resetSession()
+                resourceMonitor.setPhase(ResourcePhase.IDLE)
+
+                emitError(
+                    "Unable to start listening: ${error.message ?: error.javaClass.simpleName}"
+                )
             }
         }
     }
 
-    fun stopListening(messageId: String? = null) {
-        val capture = captureRequest.get() ?: return
-        if (messageId == null || messageId == capture.id) capture.stopRequested.set(true)
-    }
-
-    private fun beginUtterance(capture: CaptureRequest) {
-        sttEngine.beginSession()
-        capture.utteranceActive = true
-        capture.utteranceStartMs = null
-        capture.utteranceEndMs = null
-    }
-
-    private fun handleAudioFrame(capture: CaptureRequest, frame: AudioFrame) {
-        if (!capture.firstFrameSeen) {
-            capture.firstFrameSeen = true
-            capture.firstFrameLatencyMs = (frame.readAtEpochMs - capture.pressedAtEpochMs).coerceAtLeast(0)
-            emitEvent(mapOf(
-                "type" to "capture_state", "state" to "recording", "captureId" to capture.id,
-                "messageId" to capture.id, "timestampEpochMs" to frame.timestampMs,
-                "firstFrameLatencyMs" to capture.firstFrameLatencyMs,
-                "text" to "Listening ($mode); microphone frames are arriving",
-            ))
-        }
-        val decision = vadProcessor.process(frame)
-        if (capture.ptt) {
-            deliverAudio(capture, frame)
+    fun stopListening() {
+        if (!listening.get()) {
             return
         }
-        if (!capture.utteranceActive) {
-            capture.preRoll.add(frame)
-            if (decision.isSpeech) {
-                beginUtterance(capture)
-                for (bufferedFrame in capture.preRoll.drain()) deliverAudio(capture, bufferedFrame)
-            }
-        } else {
-            deliverAudio(capture, frame)
-            if (decision.pauseDetected || decision.silenceDurationMs >= vadProcessor.silenceThresholdMs()) {
-                finalizeUtterance(capture, "vad_pause")
-                vadProcessor.reset()
+
+        /*
+         * Stop the microphone immediately.
+         */
+        listening.set(false)
+        inSpeechState = false
+        preSpeechRingBuffer.clear()
+        consecutiveSilenceFrames = 0
+        audioCaptureManager.stop()
+
+        /*
+         * Final STT decoding can be expensive, so do it in the
+         * background pipeline executor.
+         */
+        pipelineExecutor.execute {
+            try {
+                finalizeUtterance(reason = "manual_stop")
+            } catch (error: Throwable) {
+                emitError(
+                    "Failed to finalize speech: ${error.message ?: error.javaClass.simpleName}"
+                )
+            } finally {
+                resourceMonitor.setPhase(ResourcePhase.IDLE)
             }
         }
     }
 
-    private fun deliverAudio(capture: CaptureRequest, frame: AudioFrame) {
-        sttEngine.acceptAudio(frame.samples, frame.sampleRate)
-        capture.deliveredSamples += frame.samples.size
-        if (capture.utteranceStartMs == null) capture.utteranceStartMs = frame.timestampMs
-        capture.utteranceEndMs = frame.timestampMs + frame.samples.size * 1000L / frame.sampleRate
-    }
+    fun dispose() {
+        listening.set(false)
+        inSpeechState = false
+        preSpeechRingBuffer.clear()
+        consecutiveSilenceFrames = 0
 
-    private fun finalizeUtterance(capture: CaptureRequest, reason: String) {
-        if (!capture.utteranceActive) return
-        val result = sttEngine.finalizeSession()
-        capture.utteranceActive = false
-        capture.decodeCalls += (result.metrics["decodeCalls"] as? Number)?.toInt() ?: 0
-        val valid = result.error == null && capture.failure.get() == null && result.metrics["recognitionValid"] == true
-        val metrics = result.metrics + mapOf(
-            "type" to "stt_metrics", "messageId" to capture.messageId, "captureId" to capture.id,
-            "backend" to sttEngine.backendName, "reason" to reason,
-            "audioStartEpochMs" to capture.utteranceStartMs, "audioEndEpochMs" to capture.utteranceEndMs,
-            "recognitionFinishedEpochMs" to System.currentTimeMillis(),
-            "firstFrameLatencyMs" to capture.firstFrameLatencyMs, "recognitionValid" to valid,
-            "error" to (result.error ?: capture.failure.get()),
-        )
-        logMetrics(metrics)
-        if (result.error != null) failCapture(capture, result.error)
-        val text = sentenceManager.finalizeSentence(result.finalText.orEmpty())
-        if (valid && text.isNotBlank()) {
-            emitEvent(mapOf(
-                "type" to "final_sentence", "text" to text, "messageId" to capture.messageId,
-                "captureId" to capture.id, "languageCode" to capture.languageCode,
-                "reason" to reason, "recognitionValid" to true, "fallback" to false,
-            ))
-        }
-        capture.utteranceIndex++
-    }
+        audioCaptureManager.stop()
 
-    private fun failCapture(capture: CaptureRequest, reason: String) {
-        capture.failure.compareAndSet(null, reason)
-        capture.stopRequested.set(true)
-    }
-
-    private fun completeWithoutRecording(capture: CaptureRequest) {
-        finishCapture(capture, mapOf("capturedSamples" to 0L, "capturedDurationMs" to 0.0))
-    }
-
-    private fun finishCapture(capture: CaptureRequest, captureMetrics: Map<String, Any?>) {
-        try {
-            if (!disposed.get() && capture.failure.get() == null) {
-                finalizeUtterance(capture, "manual_stop")
-            } else if (capture.utteranceActive) {
-                logMetrics(sttEngine.currentSessionMetrics() + mapOf(
-                    "type" to "stt_metrics", "messageId" to capture.messageId, "captureId" to capture.id,
-                    "recognitionValid" to false, "error" to capture.failure.get(),
-                ))
+        pipelineExecutor.execute {
+            try {
+                sttEngine.shutdown()
+                ttsEngine.shutdown()
+                resourceMonitor.stop()
+            } catch (_: Throwable) {
             }
-            sttEngine.resetSession()
-            captureRequest.compareAndSet(capture, null)
-            val capturedSamples = (captureMetrics["capturedSamples"] as? Number)?.toLong() ?: 0L
-            logMetrics(captureMetrics + mapOf(
-                "type" to "capture_metrics", "captureId" to capture.id, "messageId" to capture.id,
-                "deliveredSamples" to capture.deliveredSamples, "decodeCalls" to capture.decodeCalls,
-                "firstFrameLatencyMs" to capture.firstFrameLatencyMs,
-                "idleSamplesNotTranscribed" to if (!capture.ptt && capture.failure.get() == null)
-                    capturedSamples - capture.deliveredSamples else 0L,
-                "captureValid" to (capture.failure.get() == null && !disposed.get()),
-                "error" to capture.failure.get(),
-            ))
-            val failure = capture.failure.get()
-            if (failure != null && !disposed.get()) emitError(failure, capture)
-            emitEvent(mapOf(
-                "type" to "capture_state", "state" to "stopped", "captureId" to capture.id,
-                "messageId" to capture.id, "failed" to (failure != null),
-                "text" to if (failure != null) "Recording failed: $failure" else "Recording finished",
-            ))
-        } finally {
-            captureRequest.compareAndSet(capture, null)
-            resourceMonitor.setPhase(ResourcePhase.IDLE)
-            if (disposed.get()) {
-                closeResources()
+        }
+
+        pipelineExecutor.shutdownNow()
+    }
+
+    private fun handleAudioFrame(frame: AudioFrame) {
+        if (!listening.get()) {
+            return
+        }
+
+        val decision = vadProcessor.process(frame)
+
+        if (!inSpeechState) {
+            if (preSpeechRingBuffer.size >= 18) {
+                preSpeechRingBuffer.removeFirst()
+            }
+            preSpeechRingBuffer.addLast(frame)
+        }
+
+        if (decision.speechStarted && !inSpeechState) {
+            inSpeechState = true
+            emitEvent(
+                mapOf(
+                    "type" to "status",
+                    "text" to "Speech started",
+                    "messageId" to activeMessageId,
+                ),
+            )
+            while (preSpeechRingBuffer.isNotEmpty()) {
+                val buffered = preSpeechRingBuffer.removeFirst()
+                bufferAudio(buffered.samples)
+                sttEngine.acceptAudio(buffered.samples, buffered.sampleRate)
+            }
+        }
+
+        if (inSpeechState || pttMode || decision.isSpeech) {
+            // Silence compression for Whisper in PTT mode:
+            // Cap continuous silence to 300ms to prevent autoregressive decoder
+            // hallucination on dead air. NeMo CTC uses <blank> tokens and is immune.
+            if (pttMode && !decision.isSpeech) {
+                consecutiveSilenceFrames++
+                if (sttEngine.isWhisperEngine() && consecutiveSilenceFrames > maxSilenceFramesForWhisper) {
+                    return // Skip this silence frame — don't feed dead air to Whisper
+                }
             } else {
-                val requestedLanguage = pendingLanguage
-                pendingLanguage = null
-                if (requestedLanguage != null) {
-                    runCatching { configureLanguage(requestedLanguage) }
-                        .onFailure { emitError("Language switch failed: ${it.message}") }
+                consecutiveSilenceFrames = 0
+            }
+
+            bufferAudio(frame.samples)
+            val sttResult = sttEngine.acceptAudio(
+                frame.samples,
+                frame.sampleRate,
+            )
+
+            val partial = sttResult.partial
+
+            if (!partial.isNullOrBlank()) {
+                emitEvent(
+                    mapOf(
+                        "type" to "partial",
+                        "text" to partial,
+                        "messageId" to activeMessageId,
+                    ),
+                )
+            }
+        }
+
+        if (!pttMode && decision.pauseDetected && inSpeechState) {
+            inSpeechState = false
+            preSpeechRingBuffer.clear()
+
+            /*
+             * We are already on the audio background thread.
+             * Finalization is relatively expensive, so schedule it
+             * on the pipeline executor.
+             */
+            pipelineExecutor.execute {
+                if (!listening.get()) {
+                    return@execute
+                }
+
+                try {
+                    finalizeUtterance(reason = "vad_pause")
+
+                    sttEngine.beginSession()
+
+                    activeMessageId =
+                        "native-${System.currentTimeMillis()}"
+                } catch (error: Throwable) {
+                    emitError(
+                        "VAD sentence finalization failed: ${error.message}"
+                    )
                 }
             }
         }
@@ -301,19 +414,135 @@ class VoicePipelineOrchestrator(
         }
     }
 
-    private fun closeResources() {
-        if (resourcesClosed) return
-        resourcesClosed = true
-        runCatching { sttEngine.shutdown() }
-        ttsEngine.shutdown()
-        resourceMonitor.stop()
-        audioCaptureManager.shutdown()
-        pipelineExecutor.shutdown()
+    private fun finalizeUtterance(reason: String) {
+        val result = sttEngine.finalizeSession()
+
+        val finalText =
+            sentenceManager.finalizeSentence(
+                result.finalText.orEmpty()
+            )
+
+        val messageId = activeMessageId
+
+        if (messageId != null && finalText.isNotBlank()) {
+            emitEvent(
+                mapOf(
+                    "type" to "final_sentence",
+                    "text" to finalText,
+                    "messageId" to messageId,
+                    "reason" to reason,
+                ),
+            )
+        }
+
+        saveDiagnosticWav()
+
+        if (pttMode || reason == "manual_stop") {
+            activeMessageId = null
+        }
     }
 
-    fun speakText(text: String, languageCode: String, emergency: Boolean, messageId: String?) {
-        val resolvedMessageId = messageId ?: "tts-${System.currentTimeMillis()}"
-        if (emergency) emergencyAudioController.prepareMaxVolume()
+    private fun bufferAudio(samples: ShortArray) {
+        synchronized(utteranceAudioBuffer) {
+            val byteBuf = java.nio.ByteBuffer.allocate(samples.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            for (s in samples) {
+                byteBuf.putShort(s)
+            }
+            utteranceAudioBuffer.write(byteBuf.array())
+        }
+    }
+
+    private fun saveDiagnosticWav() {
+        val pcmData = synchronized(utteranceAudioBuffer) {
+            val data = utteranceAudioBuffer.toByteArray()
+            utteranceAudioBuffer.reset()
+            data
+        }
+        if (pcmData.isEmpty()) return
+
+        try {
+            val dir = appContext.getExternalFilesDir(null) ?: appContext.filesDir
+            val wavFile = java.io.File(dir, "last_recording.wav")
+            val totalAudioLen = pcmData.size.toLong()
+            val totalDataLen = totalAudioLen + 36
+            val sampleRate = AudioCaptureManager.SAMPLE_RATE.toLong()
+            val channels = 1
+            val byteRate = 16L * sampleRate * channels / 8
+
+            java.io.FileOutputStream(wavFile).use { out ->
+                val header = ByteArray(44)
+                header[0] = 'R'.code.toByte()
+                header[1] = 'I'.code.toByte()
+                header[2] = 'F'.code.toByte()
+                header[3] = 'F'.code.toByte()
+                header[4] = (totalDataLen and 0xffL).toByte()
+                header[5] = ((totalDataLen shr 8) and 0xffL).toByte()
+                header[6] = ((totalDataLen shr 16) and 0xffL).toByte()
+                header[7] = ((totalDataLen shr 24) and 0xffL).toByte()
+                header[8] = 'W'.code.toByte()
+                header[9] = 'A'.code.toByte()
+                header[10] = 'V'.code.toByte()
+                header[11] = 'E'.code.toByte()
+                header[12] = 'f'.code.toByte()
+                header[13] = 'm'.code.toByte()
+                header[14] = 't'.code.toByte()
+                header[15] = ' '.code.toByte()
+                header[16] = 16
+                header[17] = 0
+                header[18] = 0
+                header[19] = 0
+                header[20] = 1
+                header[21] = 0
+                header[22] = channels.toByte()
+                header[23] = 0
+                header[24] = (sampleRate and 0xffL).toByte()
+                header[25] = ((sampleRate shr 8) and 0xffL).toByte()
+                header[26] = ((sampleRate shr 16) and 0xffL).toByte()
+                header[27] = ((sampleRate shr 24) and 0xffL).toByte()
+                header[28] = (byteRate and 0xffL).toByte()
+                header[29] = ((byteRate shr 8) and 0xffL).toByte()
+                header[30] = ((byteRate shr 16) and 0xffL).toByte()
+                header[31] = ((byteRate shr 24) and 0xffL).toByte()
+                header[32] = (channels * 16 / 8).toByte()
+                header[33] = 0
+                header[34] = 16
+                header[35] = 0
+                header[36] = 'd'.code.toByte()
+                header[37] = 'a'.code.toByte()
+                header[38] = 't'.code.toByte()
+                header[39] = 'a'.code.toByte()
+                header[40] = (totalAudioLen and 0xffL).toByte()
+                header[41] = ((totalAudioLen shr 8) and 0xffL).toByte()
+                header[42] = ((totalAudioLen shr 16) and 0xffL).toByte()
+                header[43] = ((totalAudioLen shr 24) and 0xffL).toByte()
+                out.write(header, 0, 44)
+                out.write(pcmData)
+            }
+            android.util.Log.d("VoicePipeline", "Saved diagnostic WAV: ${wavFile.absolutePath} (${pcmData.size / 32000.0}s)")
+        } catch (e: Throwable) {
+            android.util.Log.w("VoicePipeline", "Failed to save diagnostic WAV", e)
+        }
+    }
+
+    fun speakText(
+        text: String,
+        languageCode: String,
+        emergency: Boolean,
+        messageId: String?,
+    ) {
+        val resolvedMessageId =
+            messageId ?: "tts-${System.currentTimeMillis()}"
+
+        /*
+         * TTS itself already handles Android TTS initialization on
+         * the main Android handler internally.
+         *
+         * We only avoid doing model-size/file work here.
+         */
+        if (emergency) {
+            emergencyAudioController.prepareMaxVolume()
+        }
+
         resourceMonitor.setPhase(ResourcePhase.TTS)
         ttsEngine.speak(
             text = text, languageCode = languageCode, emergency = emergency, messageId = resolvedMessageId,

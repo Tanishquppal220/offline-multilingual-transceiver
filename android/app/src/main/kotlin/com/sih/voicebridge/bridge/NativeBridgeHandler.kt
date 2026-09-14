@@ -153,16 +153,28 @@ class NativeBridgeHandler(
                     val languageCode =
                         call.argument<String>("languageCode")
                             ?: "en"
+                    val engineType =
+                        call.argument<String>("engineType")
+                            ?: "conformer"
 
                     /*
                      * The orchestrator performs expensive initialization
                      * on its background executor.
                      */
-                    orchestrator.initialize(languageCode)
+                    orchestrator.initialize(languageCode, engineType)
 
                     /*
                      * Return immediately to Flutter.
                      */
+                    result.success(null)
+                }
+
+                "setSttEngine" -> {
+                    val engineType =
+                        call.argument<String>("engineType")
+                            ?: "conformer"
+
+                    orchestrator.setSttEngine(engineType)
                     result.success(null)
                 }
 

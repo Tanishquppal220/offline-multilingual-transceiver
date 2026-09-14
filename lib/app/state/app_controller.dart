@@ -49,6 +49,7 @@ class AppController extends ChangeNotifier {
   String _partialTranscript = '';
   OperationMode _operationMode = OperationMode.walkieTalkie;
   LanguageOption _selectedLanguage = kLanguageOptions.first;
+  String _selectedSttEngine = 'conformer';
   ConnectionConfig _connectionConfig = ConnectionConfig.initial;
   final List<SpeechMessage> _history = <SpeechMessage>[];
   final List<BenchmarkSnapshot> _benchmarkHistory = <BenchmarkSnapshot>[];
@@ -67,6 +68,7 @@ class AppController extends ChangeNotifier {
   String get partialTranscript => _partialTranscript;
   OperationMode get operationMode => _operationMode;
   LanguageOption get selectedLanguage => _selectedLanguage;
+  String get selectedSttEngine => _selectedSttEngine;
   ConnectionConfig get connectionConfig => _connectionConfig;
   List<SpeechMessage> get history => List<SpeechMessage>.unmodifiable(_history);
   List<BenchmarkSnapshot> get benchmarkHistory =>
@@ -87,7 +89,10 @@ class AppController extends ChangeNotifier {
     };
 
     _nativeEventsSub = _nativeBridgeService.events.listen(_handleNativeEvent);
-    await _nativeBridgeService.initialize(languageCode: _selectedLanguage.code);
+    await _nativeBridgeService.initialize(
+      languageCode: _selectedLanguage.code,
+      engineType: _selectedSttEngine,
+    );
 
     final PersistedBenchmarkHistory persistedHistory =
         await _benchmarkHistoryStorageService.load(
@@ -158,6 +163,17 @@ class AppController extends ChangeNotifier {
     _selectedLanguage = language;
     await _nativeBridgeService.setLanguage(language.code);
     _status = 'Language set to ${language.label}';
+    notifyListeners();
+  }
+
+  Future<void> setSttEngine(String engineType) async {
+    if (_selectedSttEngine == engineType) {
+      return;
+    }
+    _selectedSttEngine = engineType;
+    _benchmarkTracker.setSttEngine(engineType);
+    await _nativeBridgeService.setSttEngine(engineType);
+    _status = 'STT Engine: ${engineType == 'whisper' ? 'Whisper Multilingual' : 'Conformer CTC'}';
     notifyListeners();
   }
 

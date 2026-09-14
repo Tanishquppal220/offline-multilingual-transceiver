@@ -105,6 +105,7 @@ class BenchmarkSnapshot {
     required this.messageId,
     required this.marks,
     required this.resource,
+    this.sttEngine = 'conformer',
     this.audioDuration,
     this.processingDuration,
   });
@@ -112,6 +113,7 @@ class BenchmarkSnapshot {
   final String messageId;
   final BenchmarkMarks marks;
   final ResourceBenchmark resource;
+  final String sttEngine;
   final Duration? audioDuration;
   final Duration? processingDuration;
 

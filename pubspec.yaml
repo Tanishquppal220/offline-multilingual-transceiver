@@ -21,4 +21,5 @@ flutter:
   assets:
     - assets/models/stt/
     - assets/models/stt/en/
+    - assets/models/stt/whisper/
     - assets/models/tts/

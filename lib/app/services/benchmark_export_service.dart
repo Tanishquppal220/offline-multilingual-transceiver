@@ -82,6 +82,7 @@ class BenchmarkExportService {
   }) {
     final Map<String, dynamic> payload = <String, dynamic>{
       'messageId': snapshot.messageId,
+      'sttEngine': snapshot.sttEngine,
       'timeline': <String, dynamic>{
         't0SpeechStart': _iso(snapshot.marks.t0SpeechStart),
         't1SpeechEnd': _iso(snapshot.marks.t1SpeechEnd),
@@ -135,6 +136,7 @@ class BenchmarkExportService {
     return <String, String>{
       'exported_at': DateTime.now().toIso8601String(),
       'message_id': snapshot.messageId,
+      'stt_engine': snapshot.sttEngine,
       'message_type': message == null ? '' : messageTypeToWire(message.type),
       'message_origin':
           message == null ? '' : _messageOriginToWire(message.origin),

@@ -93,10 +93,20 @@ class NativeBridgeService {
   Stream<NativeEvent> get events => _eventsController.stream;
   bool get nativeAvailable => _nativeAvailable;
 
-  Future<void> initialize({required String languageCode}) async {
+  Future<void> initialize({
+    required String languageCode,
+    String engineType = 'conformer',
+  }) async {
     await _subscribeToEventStream();
     await _invoke('initializePipelines', <String, dynamic>{
       'languageCode': languageCode,
+      'engineType': engineType,
+    });
+  }
+
+  Future<void> setSttEngine(String engineType) async {
+    await _invoke('setSttEngine', <String, dynamic>{
+      'engineType': engineType,
     });
   }
 

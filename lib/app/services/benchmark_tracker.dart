@@ -24,13 +24,12 @@ class BenchmarkTracker {
     _resourceBenchmark = usage;
   }
 
-  void recordAudioTiming(
-    String messageId, {
-    required Duration audioDuration,
-    required Duration processingDuration,
-  }) {
-    _measuredAudioDurations[messageId] = audioDuration;
-    _measuredProcessingDurations[messageId] = processingDuration;
+  String _activeSttEngine = 'conformer';
+
+  String get activeSttEngine => _activeSttEngine;
+
+  void setSttEngine(String engine) {
+    _activeSttEngine = engine;
   }
 
   BenchmarkSnapshot snapshotFor(
@@ -45,10 +44,9 @@ class BenchmarkTracker {
       messageId: messageId,
       marks: marks,
       resource: _resourceBenchmark,
-      audioDuration: _measuredAudioDurations[messageId] ?? audioDuration,
-      processingDuration: _measuredProcessingDurations[messageId] ??
-          processingDuration ??
-          _inferProcessingDuration(marks),
+      sttEngine: _activeSttEngine,
+      audioDuration: audioDuration,
+      processingDuration: processingDuration ?? _inferProcessingDuration(marks),
     );
   }
 

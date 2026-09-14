@@ -1,0 +1,72 @@
+{
+  "summaries": [
+    {
+      "engine_name": "Conformer CTC",
+      "sample_count": 2,
+      "total_audio_sec": 23.33,
+      "total_inference_sec": 0.84,
+      "mean_wer": 4.87,
+      "mean_cer": 1.56,
+      "mean_latency_ms": 422.1,
+      "mean_rtf": 0.0358,
+      "p95_latency_ms": 231.6
+    },
+    {
+      "engine_name": "Whisper Tiny",
+      "sample_count": 2,
+      "total_audio_sec": 23.33,
+      "total_inference_sec": 2.89,
+      "mean_wer": 3.12,
+      "mean_cer": 0.4,
+      "mean_latency_ms": 1444.5,
+      "mean_rtf": 0.1238,
+      "p95_latency_ms": 820.0
+    }
+  ],
+  "samples": [
+    {
+      "audio_file": "0.wav",
+      "audio_duration_sec": 6.62,
+      "reference": "AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP HERE AND THERE THE SQUALID QUARTER OF THE BROTHELS",
+      "hypothesis": "after early nightfall the yellow lamps would light up here and there the squalid quarter of the brothles",
+      "engine": "Conformer CTC",
+      "wer": 5.56,
+      "cer": 1.92,
+      "latency_ms": 231.6,
+      "rtf": 0.035
+    },
+    {
+      "audio_file": "1.wav",
+      "audio_duration_sec": 16.71,
+      "reference": "GOD AS A DIRECT CONSEQUENCE OF THE SIN WHICH MAN THUS PUNISHED HAD GIVEN HER A LOVELY CHILD WHOSE PLACE WAS ON THAT SAME DISHONOURED BOSOM TO CONNECT HER PARENT FOR EVER WITH THE RACE AND DESCENT OF MORTALS AND TO BE FINALLY A BLESSED SOUL IN HEAVEN",
+      "hypothesis": "god as a direct consequence of the sin which man thus punished had given her a lovely child whose place was on that same dishonoured bosom to connect her parent for ever with the race and disscent of mortals and to be finally a blesed soul in heaven",
+      "engine": "Conformer CTC",
+      "wer": 4.17,
+      "cer": 1.2,
+      "latency_ms": 612.5,
+      "rtf": 0.0366
+    },
+    {
+      "audio_file": "0.wav",
+      "audio_duration_sec": 6.62,
+      "reference": "AFTER EARLY NIGHTFALL THE YELLOW LAMPS WOULD LIGHT UP HERE AND THERE THE SQUALID QUARTER OF THE BROTHELS",
+      "hypothesis": "After early nightfall, the yellow lamps would light up here and there the squalid quarter of the brothels.",
+      "engine": "Whisper Tiny",
+      "wer": 0.0,
+      "cer": 0.0,
+      "latency_ms": 820.0,
+      "rtf": 0.1238
+    },
+    {
+      "audio_file": "1.wav",
+      "audio_duration_sec": 16.71,
+      "reference": "GOD AS A DIRECT CONSEQUENCE OF THE SIN WHICH MAN THUS PUNISHED HAD GIVEN HER A LOVELY CHILD WHOSE PLACE WAS ON THAT SAME DISHONOURED BOSOM TO CONNECT HER PARENT FOR EVER WITH THE RACE AND DESCENT OF MORTALS AND TO BE FINALLY A BLESSED SOUL IN HEAVEN",
+      "hypothesis": "God, as a direct consequence of the sin which man thus punished, had given her a lovely child whose place was on that same dishonored bosom to connect her parent forever with the race and descent of mortals, and to be finally a blessed soul in heaven.",
+      "engine": "Whisper Tiny",
+      "wer": 6.25,
+      "cer": 0.8,
+      "latency_ms": 2069.1,
+      "rtf": 0.1238
+    }
+  ]
+}

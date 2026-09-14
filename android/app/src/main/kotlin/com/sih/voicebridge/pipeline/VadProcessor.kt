@@ -14,12 +14,13 @@ class VadProcessor(
     private var silenceThresholdMs: Long = 700,
     private var minSpeechDurationMs: Long = 250,
     private var baseEnergyThreshold: Double = 0.008,
+    private val hangoverMs: Long = 150,
 ) {
     private var inSpeech = false
     private var speechStartedAtMs: Long? = null
     private var lastSpeechAtMs: Long? = null
     private var noiseFloor = 0.002
-    private var processedSamples = 0L
+    private var hangoverCountdown = 0L
 
     fun configureSilenceThreshold(valueMs: Long) {
         silenceThresholdMs = valueMs.coerceIn(300, 2000)
@@ -34,6 +35,7 @@ class VadProcessor(
         inSpeech = false
         speechStartedAtMs = null
         lastSpeechAtMs = null
+        hangoverCountdown = 0L
     }
 
     fun silenceThresholdMs(): Long {
@@ -45,9 +47,22 @@ class VadProcessor(
         val audioTimeMs = processedSamples * 1000L / frame.sampleRate
         val rmsEnergy = calculateRmsEnergy(frame.samples)
         val dynamicThreshold = maxOf(baseEnergyThreshold, noiseFloor * 3.2)
-        val speech = rmsEnergy >= dynamicThreshold
+        val rawSpeech = rmsEnergy >= dynamicThreshold
 
-        if (!speech) {
+        // Hangover: hold speech=true for hangoverMs after energy drops.
+        // This prevents mid-word flickering on weak phonemes and unvoiced consonants.
+        val speech: Boolean
+        if (rawSpeech) {
+            hangoverCountdown = hangoverMs
+            speech = true
+        } else if (hangoverCountdown > 0) {
+            hangoverCountdown -= 20 // FRAME_MS = 20ms
+            speech = true
+        } else {
+            speech = false
+        }
+
+        if (!rawSpeech) {
             noiseFloor = (noiseFloor * 0.98) + (rmsEnergy * 0.02)
         }
 

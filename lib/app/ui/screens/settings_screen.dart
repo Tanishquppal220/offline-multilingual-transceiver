@@ -299,10 +299,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Select edge AI recognition language model',
+            'Select speech model engine and recognition language',
             style: AppTypography.bodySm,
           ),
           const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.outline),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    const Icon(Icons.psychology, color: AppColors.secondary, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'AI ENGINE (HOT-SWAP)',
+                      style: AppTypography.labelCaps.copyWith(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.1,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Switch between AI speech backends at runtime to test accuracy vs latency.',
+                  style: AppTypography.bodySm,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _EngineSelectCard(
+                        title: 'Conformer CTC',
+                        subtitle: 'Ultra-Fast • 46MB',
+                        icon: Icons.bolt,
+                        selected: controller.selectedSttEngine == 'conformer',
+                        onTap: () => controller.setSttEngine('conformer'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _EngineSelectCard(
+                        title: 'Whisper Tiny',
+                        subtitle: 'High Accuracy • 99MB',
+                        icon: Icons.auto_awesome,
+                        selected: controller.selectedSttEngine == 'whisper',
+                        onTap: () => controller.setSttEngine('whisper'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('LANGUAGE SELECTION', style: AppTypography.labelCaps),
+          const SizedBox(height: 8),
           Column(
             children: kLanguageOptions.map((LanguageOption opt) {
               final bool selected = controller.selectedLanguage.code == opt.code;
@@ -566,3 +625,77 @@ class _MetricTile extends StatelessWidget {
     );
   }
 }
+
+class _EngineSelectCard extends StatelessWidget {
+  const _EngineSelectCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.secondary.withValues(alpha: 0.15)
+              : AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? AppColors.secondary : AppColors.outline,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  icon,
+                  size: 18,
+                  color: selected ? AppColors.secondary : AppColors.outlineVariant,
+                ),
+                const Spacer(),
+                if (selected)
+                  const Icon(Icons.check_circle, size: 16, color: AppColors.secondary)
+                else
+                  const Icon(Icons.circle_outlined, size: 16, color: AppColors.outlineVariant),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: AppTypography.bodyLg.copyWith(
+                fontWeight: selected ? FontWeight.bold : FontWeight.w600,
+                color: selected ? AppColors.secondary : AppColors.onSurface,
+                fontSize: 13,
+              ),
+            ),
+            Text(
+              subtitle,
+              style: AppTypography.telemetrySm.copyWith(
+                fontSize: 10,
+                color: selected ? AppColors.secondary : AppColors.outlineVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
