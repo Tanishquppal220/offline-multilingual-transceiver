@@ -22,4 +22,16 @@ flutter:
     - assets/models/stt/
     - assets/models/stt/en/
     - assets/models/tts/
+    - assets/models/stt/gu/
     - assets/models/stt/hi/
+    - assets/models/stt/
+    - assets/models/stt/en/
+    - assets/models/tts/
+    - assets/models/stt/mr/
+    - assets/models/stt/kn/
+    - assets/models/stt/ml/
+    - assets/models/stt/or/
+    - assets/models/stt/ta/
+    - assets/models/stt/te/
+    - assets/models/stt/bn/
+    
