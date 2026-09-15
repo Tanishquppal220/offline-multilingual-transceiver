@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../models/speech_message.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/pulsing_dot.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key, required this.controller});
@@ -37,10 +36,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 76, 16, 12),
               children: <Widget>[
-                // Mesh Channel Status Banner
-                _buildMeshBanner(controller),
-                const SizedBox(height: 12),
-
                 // Header Action Bar
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -48,26 +43,32 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('RECENT MESSAGES', style: AppTypography.headlineSm),
+                        Text('RECENT DISPATCHES', style: AppTypography.headlineSm),
                         Text(
-                          'Stored offline on this device',
-                          style: AppTypography.bodySm,
+                          messages.isEmpty
+                              ? 'Offline radio storage clear'
+                              : '${messages.length} message${messages.length == 1 ? '' : 's'} recorded',
+                          style: AppTypography.bodySm.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.onSurfaceVariant,
-                        backgroundColor: AppColors.surfaceContainerHigh,
-                        minimumSize: const Size(48, 40),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    if (messages.isNotEmpty)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.onSurfaceVariant,
+                          backgroundColor: AppColors.surfaceContainerHigh,
+                          minimumSize: const Size(40, 34),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
+                        onPressed: controller.clearHistory,
+                        icon: const Icon(Icons.delete_sweep, size: 16),
+                        label: Text('Clear', style: AppTypography.bodySm.copyWith(fontSize: 12)),
                       ),
-                      onPressed: messages.isEmpty ? null : controller.clearHistory,
-                      icon: const Icon(Icons.delete_sweep, size: 18),
-                      label: Text('Clear All', style: AppTypography.bodySm),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -80,10 +81,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     _buildMessageCard(msg, controller),
                     const SizedBox(height: 10),
                   ],
-
-                const SizedBox(height: 12),
-                // Quick Presets
-                _buildPresets(controller),
               ],
             ),
           ),
@@ -95,57 +92,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
     );
   }
 
-  Widget _buildMeshBanner(AppController controller) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outline),
-      ),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.cell_tower, color: AppColors.secondary, size: 26),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'SECTOR B MESH CHANNEL',
-                  style: AppTypography.labelCaps.copyWith(color: AppColors.onSurface),
-                ),
-                Text(
-                  'Direct device-to-device • No internet needed',
-                  style: AppTypography.bodySm,
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.tertiaryFixed,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: <Widget>[
-                const PulsingDot(color: AppColors.onTertiaryFixed, size: 6),
-                const SizedBox(width: 4),
-                Text(
-                  controller.isConnected ? 'ONLINE' : 'LOCAL',
-                  style: AppTypography.labelCaps.copyWith(
-                    color: AppColors.onTertiaryFixed,
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildMessageCard(SpeechMessage msg, AppController controller) {
     final bool isEmergency = msg.type == MessageType.emergency;
@@ -365,7 +311,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     );
   }
 
-  Widget _buildPresets(AppController controller) {
+  Widget _buildStickyCompose(AppController controller) {
     const List<String> presets = <String>[
       '👍 I am OK',
       '🆘 Need Help',
@@ -373,112 +319,117 @@ class _MessagesScreenState extends State<MessagesScreen> {
       '📡 Check In',
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('QUICK PRESETS (TAP TO SEND)', style: AppTypography.labelCaps),
-        const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 3.2,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: presets.map((String text) {
-            final bool isSos = text.contains('Need Help');
-            return ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isSos
-                    ? AppColors.errorContainer.withValues(alpha: 0.4)
-                    : AppColors.surfaceContainerLow,
-                foregroundColor: isSos ? AppColors.error : AppColors.onSurface,
-                side: BorderSide(color: isSos ? AppColors.error : AppColors.outline),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-              ),
-              onPressed: () {
-                if (isSos) {
-                  controller.sendEmergencyPreset();
-                } else {
-                  controller.sendTypedMessage(text);
-                }
-              },
-              child: Text(
-                text,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySm.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: isSos ? AppColors.error : AppColors.onSurface,
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStickyCompose(AppController controller) {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        10,
-        16,
-        MediaQuery.paddingOf(context).bottom + 74,
-      ),
       decoration: const BoxDecoration(
         color: AppColors.surfaceContainerLowest,
-        border: Border(top: BorderSide(color: AppColors.outline)),
+        border: Border(top: BorderSide(color: AppColors.outline, width: 1)),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppColors.outline),
-              ),
-              child: TextField(
-                controller: _msgInputController,
-                decoration: const InputDecoration(
-                  hintText: 'Type a quick message...',
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                ),
-                onSubmitted: (String val) {
-                  if (val.trim().isNotEmpty) {
-                    controller.sendTypedMessage(val.trim());
-                    _msgInputController.clear();
-                  }
-                },
-              ),
+          // Horizontal Presets Action Bar
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: presets.map((String text) {
+                final bool isSos = text.contains('Need Help');
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ActionChip(
+                    backgroundColor: isSos
+                        ? AppColors.errorContainer.withValues(alpha: 0.45)
+                        : AppColors.surfaceContainerLow,
+                    side: BorderSide(
+                      color: isSos
+                          ? AppColors.error
+                          : AppColors.outline.withValues(alpha: 0.7),
+                      width: isSos ? 1.2 : 0.8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    label: Text(
+                      text,
+                      style: AppTypography.bodySm.copyWith(
+                        fontSize: 12,
+                        fontWeight: isSos ? FontWeight.w700 : FontWeight.w500,
+                        color: isSos ? AppColors.error : AppColors.onSurface,
+                      ),
+                    ),
+                    onPressed: () {
+                      if (isSos) {
+                        controller.sendEmergencyPreset();
+                      } else {
+                        controller.sendTypedMessage(text);
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
             ),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
-                foregroundColor: AppColors.onSecondary,
-                padding: EdgeInsets.zero,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+
+          // Message Input Field
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              2,
+              16,
+              MediaQuery.paddingOf(context).bottom + 74,
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: AppColors.outline),
+                    ),
+                    child: TextField(
+                      controller: _msgInputController,
+                      decoration: const InputDecoration(
+                        hintText: 'Type a dispatch message...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onSubmitted: (String val) {
+                        if (val.trim().isNotEmpty) {
+                          controller.sendTypedMessage(val.trim());
+                          _msgInputController.clear();
+                        }
+                      },
+                    ),
+                  ),
                 ),
-              ),
-              onPressed: () {
-                final String val = _msgInputController.text.trim();
-                if (val.isNotEmpty) {
-                  controller.sendTypedMessage(val);
-                  _msgInputController.clear();
-                }
-              },
-              child: const Icon(Icons.arrow_upward, size: 24),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      padding: EdgeInsets.zero,
+                      shape: const CircleBorder(),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      final String val = _msgInputController.text.trim();
+                      if (val.isNotEmpty) {
+                        controller.sendTypedMessage(val);
+                        _msgInputController.clear();
+                      }
+                    },
+                    child: const Icon(Icons.arrow_upward, size: 22),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -66,10 +66,11 @@ class TacticalHeader extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    activeTabTitle.toUpperCase(),
+                    'CH 01 • RELIEF MESH',
                     style: AppTypography.labelCaps.copyWith(
-                      color: AppColors.primary,
+                      color: AppColors.secondary,
                       fontSize: 10,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -84,6 +85,12 @@ class TacticalHeader extends StatelessWidget {
                       ? AppColors.tertiaryFixed
                       : AppColors.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: connected
+                        ? AppColors.tertiary.withValues(alpha: 0.5)
+                        : AppColors.outline.withValues(alpha: 0.5),
+                    width: 0.8,
+                  ),
                 ),
                 child: Row(
                   children: <Widget>[
@@ -92,15 +99,17 @@ class TacticalHeader extends StatelessWidget {
                           ? AppColors.onTertiaryFixed
                           : AppColors.outlineVariant,
                       size: 7,
+                      ping: connected,
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      connected ? 'CONNECTED' : 'STANDALONE',
+                      connected ? 'MESH ONLINE' : 'LOCAL MESH',
                       style: AppTypography.labelCaps.copyWith(
                         color: connected
                             ? AppColors.onTertiaryFixed
                             : AppColors.onSurfaceVariant,
                         fontSize: 10,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],

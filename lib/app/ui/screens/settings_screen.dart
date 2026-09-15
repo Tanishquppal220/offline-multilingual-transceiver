@@ -6,7 +6,6 @@ import '../../models/connection_config.dart';
 import '../../models/language_option.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/pulsing_dot.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.controller});
@@ -56,12 +55,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'Simple controls to keep your team linked without internet access.',
               style: AppTypography.bodySm,
             ),
-            const SizedBox(height: 16),
-
-            // Active Mesh Banner Card
-            _buildMeshStatusCard(controller),
-            const SizedBox(height: 16),
-
             // Section 1: Team Connection
             _buildTeamConnectionSection(controller, config),
             const SizedBox(height: 16),
@@ -93,64 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildMeshStatusCard(AppController controller) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.outline),
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.secondaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.cell_tower,
-              color: AppColors.onSecondaryContainer,
-              size: 26,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    PulsingDot(
-                      color: controller.isConnected
-                          ? AppColors.tertiary
-                          : AppColors.outlineVariant,
-                      size: 8,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      controller.isConnected ? 'MESH RADIO ACTIVE' : 'RADIO STANDBY',
-                      style: AppTypography.labelCaps.copyWith(
-                        color: controller.isConnected
-                            ? AppColors.tertiary
-                            : AppColors.outlineVariant,
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  'Relaying voice locally over direct Wi-Fi signals.',
-                  style: AppTypography.bodySm,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildTeamConnectionSection(
     AppController controller,
@@ -174,40 +109,107 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Material(
-            color: Colors.transparent,
-            child: SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'This phone is the Group Leader (Host)',
-                style: AppTypography.bodyLg.copyWith(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                'Turn this ON if creating the squad group. Turn OFF if joining another phone.',
-                style: AppTypography.bodySm,
-              ),
-              value: config.runAsServer,
-              onChanged: (bool val) {
-                controller.updateConnectionConfig(config.copyWith(runAsServer: val));
-              },
+
+          // Segmented Role Selector
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.outline),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => controller.updateConnectionConfig(config.copyWith(runAsServer: true)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: config.runAsServer ? AppColors.tertiaryContainer : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Icon(
+                            Icons.hub,
+                            size: 16,
+                            color: config.runAsServer ? AppColors.onTertiaryContainer : AppColors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'HOST MESH',
+                            style: AppTypography.labelCaps.copyWith(
+                              color: config.runAsServer ? AppColors.onTertiaryContainer : AppColors.onSurfaceVariant,
+                              fontWeight: config.runAsServer ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => controller.updateConnectionConfig(config.copyWith(runAsServer: false)),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(
+                        color: !config.runAsServer ? AppColors.secondaryContainer : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Icon(
+                            Icons.link,
+                            size: 16,
+                            color: !config.runAsServer ? AppColors.onSecondaryContainer : AppColors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'JOIN SQUAD',
+                            style: AppTypography.labelCaps.copyWith(
+                              color: !config.runAsServer ? AppColors.onSecondaryContainer : AppColors.onSurfaceVariant,
+                              fontWeight: !config.runAsServer ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const Divider(color: AppColors.outline, height: 24),
+          const SizedBox(height: 14),
+
           if (config.runAsServer) ...<Widget>[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.tertiaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.tertiary.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: <Widget>[
-                  const Icon(Icons.share, color: AppColors.tertiary, size: 20),
+                  const Icon(Icons.sensors, color: AppColors.tertiary, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Broadcasting as Group Leader on Port 7070',
-                      style: AppTypography.bodySm.copyWith(color: AppColors.tertiary),
+                      'Ready to broadcast as Host on Port 7070',
+                      style: AppTypography.bodySm.copyWith(
+                        color: AppColors.onSurface,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -216,30 +218,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ] else ...<Widget>[
             Text('LEADER PHONE IP ADDRESS', style: AppTypography.labelCaps),
             const SizedBox(height: 6),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _hostController,
-                    style: AppTypography.telemetryMd,
-                    decoration: const InputDecoration(
-                      hintText: '192.168.4.1',
-                      prefixIcon: Icon(Icons.router, color: AppColors.outlineVariant),
-                    ),
-                  ),
-                ),
-              ],
+            TextField(
+              controller: _hostController,
+              style: AppTypography.telemetryMd,
+              decoration: const InputDecoration(
+                hintText: '192.168.4.1',
+                prefixIcon: Icon(Icons.router, color: AppColors.outlineVariant),
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
-              'Default is 192.168.4.1 for most portable hotspots.',
-              style: AppTypography.bodySm,
+              'Hotspot gateway default: 192.168.4.1',
+              style: AppTypography.bodySm.copyWith(fontSize: 11),
             ),
           ],
           const SizedBox(height: 14),
+
           SizedBox(
             width: double.infinity,
-            height: 48,
+            height: 46,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: controller.isConnected
@@ -265,7 +262,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   await controller.connect();
                 }
               },
-              icon: Icon(controller.isConnected ? Icons.link_off : Icons.link),
+              icon: Icon(controller.isConnected ? Icons.link_off : Icons.link, size: 18),
               label: Text(
                 controller.isConnected
                     ? 'DISCONNECT MESH'
@@ -297,72 +294,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Text('2. VOICE & LANGUAGE', style: AppTypography.headlineSm),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             'Select edge AI recognition language model',
             style: AppTypography.bodySm,
           ),
           const SizedBox(height: 12),
-          Column(
-            children: kLanguageOptions.map((LanguageOption opt) {
+
+          // 2-Column Responsive Language Cards Grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: kLanguageOptions.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 2.7,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+            ),
+            itemBuilder: (BuildContext context, int index) {
+              final LanguageOption opt = kLanguageOptions[index];
               final bool selected = controller.selectedLanguage.code == opt.code;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.secondary.withValues(alpha: 0.15)
-                      : AppColors.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: selected ? AppColors.secondary : AppColors.outline,
-                  ),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: ListTile(
-                    title: Text(
-                      opt.label,
-                      style: AppTypography.bodyLg.copyWith(
-                        color: selected ? AppColors.secondary : AppColors.onSurface,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => controller.setLanguage(opt),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : AppColors.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? AppColors.primary : AppColors.outline,
+                        width: selected ? 1.5 : 0.8,
                       ),
                     ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: opt.sttSupported
-                              ? AppColors.tertiaryFixed
-                              : AppColors.secondaryContainer,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          opt.status.toUpperCase(),
+                    child: Row(
+                      children: <Widget>[
+                        Text(
+                          opt.code.toUpperCase(),
                           style: AppTypography.labelCaps.copyWith(
-                            color: opt.sttSupported
-                                ? AppColors.onTertiaryFixed
-                                : AppColors.onSecondaryContainer,
-                            fontSize: 10,
+                            color: selected ? AppColors.primary : AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        selected ? Icons.check_circle : Icons.circle_outlined,
-                        color: selected ? AppColors.secondary : AppColors.outlineVariant,
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            opt.label,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodyMd.copyWith(
+                              color: selected ? AppColors.primary : AppColors.onSurface,
+                              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        if (selected)
+                          const Icon(
+                            Icons.check_circle,
+                            size: 16,
+                            color: AppColors.primary,
+                          ),
+                      ],
+                    ),
                   ),
-                  onTap: () => controller.setLanguage(opt),
                 ),
-              ),
-            );
-            }).toList(),
+              );
+            },
           ),
         ],
       ),
