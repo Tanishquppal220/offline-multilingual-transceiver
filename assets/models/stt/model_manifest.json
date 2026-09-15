@@ -8,7 +8,7 @@
     "hi": {
       "type": "nemo_ctc",
       "model": "assets/models/stt/hi/model.int8.onnx",
-      "tokens": "assets/models/stt/hi/tokens.txt"
+      "tokens": "assets/models/stt/hi/indic-tokens.txt"
     },
     "gu": {
       "type": "nemo_ctc",

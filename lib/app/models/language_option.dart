@@ -32,8 +32,7 @@ const List<LanguageOption> kLanguageOptions = <LanguageOption>[
     code: 'hi',
     label: 'Hindi',
     sttSupported: true,
-    ttsSupported: false,
-    notes: 'TTS model pending evaluation',
+    ttsSupported: true,
   ),
   LanguageOption(
     code: 'gu',
