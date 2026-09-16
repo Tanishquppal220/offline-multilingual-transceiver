@@ -124,13 +124,23 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              const Icon(Icons.person_pin, color: AppColors.primary, size: 20),
-                              const SizedBox(width: 8),
-                              Text('OPERATOR & TELEMETRY', style: AppTypography.headlineSm.copyWith(fontSize: 14)),
-                            ],
+                          Expanded(
+                            child: Row(
+                              children: <Widget>[
+                                const Icon(Icons.person_pin, color: AppColors.primary, size: 20),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    'OPERATOR & TELEMETRY',
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                    style: AppTypography.headlineSm.copyWith(fontSize: 14),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           TextButton(
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -218,14 +228,29 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                         children: <Widget>[
                           const Icon(Icons.volume_up, color: AppColors.primary, size: 20),
                           const SizedBox(width: 8),
-                          Text('SPEAKER & ALERTS', style: AppTypography.headlineSm.copyWith(fontSize: 14)),
+                          Flexible(
+                            child: Text(
+                              'SPEAKER & ALERTS',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: AppTypography.headlineSm.copyWith(fontSize: 14),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: <Widget>[
-                          Text('Incoming Voice Volume', style: AppTypography.bodyMd),
+                          Flexible(
+                            child: Text(
+                              'Incoming Voice Volume',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: AppTypography.bodyMd,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           Text(
                             '${_volume.toInt()}%',
                             style: AppTypography.telemetrySm.copyWith(color: AppColors.secondary),
@@ -273,7 +298,14 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                         children: <Widget>[
                           const Icon(Icons.speed, color: AppColors.secondary, size: 20),
                           const SizedBox(width: 8),
-                          Text('TECHNICIAN BENCHMARKS', style: AppTypography.headlineSm.copyWith(fontSize: 14)),
+                          Flexible(
+                            child: Text(
+                              'TECHNICIAN BENCHMARKS',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: AppTypography.headlineSm.copyWith(fontSize: 14),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -314,7 +346,7 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                           Expanded(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                                 side: const BorderSide(color: AppColors.outline),
                               ),
                               onPressed: () {
@@ -326,15 +358,15 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                                   );
                                 }
                               },
-                              icon: const Icon(Icons.data_object, size: 16),
-                              label: const Text('Export JSON', style: TextStyle(fontSize: 12)),
+                              icon: const Icon(Icons.data_object, size: 14),
+                              label: const Text('Export JSON', style: TextStyle(fontSize: 11)),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
                                 side: const BorderSide(color: AppColors.outline),
                               ),
                               onPressed: () {
@@ -346,8 +378,8 @@ class _RadioSettingsSheetState extends State<RadioSettingsSheet> {
                                   );
                                 }
                               },
-                              icon: const Icon(Icons.table_chart, size: 16),
-                              label: const Text('Export CSV', style: TextStyle(fontSize: 12)),
+                              icon: const Icon(Icons.table_chart, size: 14),
+                              label: const Text('Export CSV', style: TextStyle(fontSize: 11)),
                             ),
                           ),
                         ],

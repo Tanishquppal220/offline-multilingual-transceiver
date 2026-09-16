@@ -96,6 +96,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.sih.voicebridge.location.LocationHelper
+import com.sih.voicebridge.network.NetworkHelper
 import com.sih.voicebridge.pipeline.VoicePipelineOrchestrator
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -108,6 +109,7 @@ class NativeBridgeHandler(
     private val appContext = context.applicationContext
 
     private val locationHelper = LocationHelper(appContext)
+    private val networkHelper = NetworkHelper(appContext)
 
     private val mainHandler =
         Handler(Looper.getMainLooper())
@@ -271,6 +273,10 @@ class NativeBridgeHandler(
                 "stopLocationUpdates" -> {
                     locationHelper.stopListening()
                     result.success(true)
+                }
+
+                "getWifiGatewayIp" -> {
+                    result.success(networkHelper.getWifiGatewayIp())
                 }
 
                 else -> {

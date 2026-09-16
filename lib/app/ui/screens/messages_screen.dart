@@ -40,21 +40,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text('RECENT DISPATCHES', style: AppTypography.headlineSm),
-                        Text(
-                          messages.isEmpty
-                              ? 'Offline radio storage clear'
-                              : '${messages.length} message${messages.length == 1 ? '' : 's'} recorded',
-                          style: AppTypography.bodySm.copyWith(
-                            color: AppColors.onSurfaceVariant,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'RECENT DISPATCHES',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.headlineSm,
                           ),
-                        ),
-                      ],
+                          Text(
+                            messages.isEmpty
+                                ? 'Offline radio storage clear'
+                                : '${messages.length} message${messages.length == 1 ? '' : 's'} recorded',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodySm.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    if (messages.isNotEmpty)
+                    if (messages.isNotEmpty) ...<Widget>[
+                      const SizedBox(width: 8),
                       TextButton.icon(
                         style: TextButton.styleFrom(
                           foregroundColor: AppColors.onSurfaceVariant,
@@ -69,6 +79,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         icon: const Icon(Icons.delete_sweep, size: 16),
                         label: Text('Clear', style: AppTypography.bodySm.copyWith(fontSize: 12)),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -128,6 +139,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         msg.senderCallsign != null
                             ? '${msg.senderCallsign!.toUpperCase()} • ${msg.senderRole?.toUpperCase() ?? "EMERGENCY"}'
                             : 'CRITICAL EMERGENCY',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppTypography.headlineSm.copyWith(
                           color: AppColors.error,
                           fontWeight: FontWeight.w700,
@@ -172,22 +185,45 @@ class _MessagesScreenState extends State<MessagesScreen> {
             if (msg.location != null) ...<Widget>[
               const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.error.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: AppColors.error.withValues(alpha: 0.5)),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    const Icon(Icons.location_on, size: 14, color: AppColors.error),
-                    const SizedBox(width: 4),
-                    Text(
-                      'LOCATION: ${msg.location!.formattedCoordinates} (${msg.location!.accuracyLabel})',
-                      style: AppTypography.telemetrySm.copyWith(
-                        color: AppColors.error,
-                        fontWeight: FontWeight.w700,
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.location_on, size: 14, color: AppColors.error),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            'LOCATION: ${msg.location!.formattedCoordinates}',
+                            style: AppTypography.telemetrySm.copyWith(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (msg.location!.accuracyLabel.isNotEmpty) ...<Widget>[
+                            const SizedBox(height: 2),
+                            Text(
+                              'ACCURACY: ${msg.location!.accuracyLabel}',
+                              style: AppTypography.telemetrySm.copyWith(
+                                color: AppColors.error.withValues(alpha: 0.85),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ],
@@ -214,41 +250,50 @@ class _MessagesScreenState extends State<MessagesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: const BoxDecoration(
-                        color: AppColors.secondary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          msg.languageCode.toUpperCase(),
-                          style: AppTypography.labelCaps.copyWith(
-                            color: AppColors.onSecondary,
-                            fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: const BoxDecoration(
+                          color: AppColors.secondary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            msg.languageCode.toUpperCase(),
+                            style: AppTypography.labelCaps.copyWith(
+                              color: AppColors.onSecondary,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          msg.senderCallsign ?? 'Remote Unit',
-                          style: AppTypography.headlineSm,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              msg.senderCallsign ?? 'Remote Unit',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.headlineSm,
+                            ),
+                            Text(
+                              '${msg.senderRole != null ? "${msg.senderRole} • " : ""}${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.telemetrySm,
+                            ),
+                          ],
                         ),
-                        Text(
-                          '${msg.senderRole != null ? "${msg.senderRole} • " : ""}${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                          style: AppTypography.telemetrySm,
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -273,15 +318,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
             if (msg.location != null) ...<Widget>[
               const SizedBox(height: 6),
               Row(
-                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Icon(Icons.location_on, size: 13, color: AppColors.tertiary),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(Icons.location_on, size: 13, color: AppColors.tertiary),
+                  ),
                   const SizedBox(width: 4),
-                  Text(
-                    '${msg.location!.formattedCoordinates} ${msg.location!.accuracyLabel}',
-                    style: AppTypography.telemetrySm.copyWith(
-                      color: AppColors.tertiary,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      '${msg.location!.formattedCoordinates}${msg.location!.accuracyLabel.isNotEmpty ? " • ${msg.location!.accuracyLabel}" : ""}',
+                      style: AppTypography.telemetrySm.copyWith(
+                        color: AppColors.tertiary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -311,10 +361,15 @@ class _MessagesScreenState extends State<MessagesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text(
-                  'YOU (${controller.userProfile.callsign.toUpperCase()})',
-                  style: AppTypography.labelCaps.copyWith(color: AppColors.primary),
+                Flexible(
+                  child: Text(
+                    'YOU (${controller.userProfile.callsign.toUpperCase()})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.labelCaps.copyWith(color: AppColors.primary),
+                  ),
                 ),
+                const SizedBox(width: 6),
                 Text(
                   '${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
                   style: AppTypography.telemetrySm,
@@ -331,19 +386,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
                 if (msg.location != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Icon(Icons.location_on, size: 12, color: AppColors.outlineVariant),
-                      const SizedBox(width: 3),
-                      Text(
-                        msg.location!.compactCoordinates,
-                        style: AppTypography.telemetrySm.copyWith(color: AppColors.outlineVariant),
-                      ),
-                    ],
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(Icons.location_on, size: 12, color: AppColors.outlineVariant),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            msg.location!.compactCoordinates,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.telemetrySm.copyWith(color: AppColors.outlineVariant),
+                          ),
+                        ),
+                      ],
+                    ),
                   )
                 else
-                  const SizedBox.shrink(),
+                  const Spacer(),
+                const SizedBox(width: 8),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[

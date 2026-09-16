@@ -82,6 +82,12 @@ class AppController extends ChangeNotifier {
   GpsLocation? get currentLocation => _currentLocation;
   bool get profileSetupNeeded => _profileSetupNeeded;
   List<SpeechMessage> get history => List<SpeechMessage>.unmodifiable(_history);
+
+  @visibleForTesting
+  void addTestMessage(SpeechMessage message) {
+    _history.insert(0, message);
+    notifyListeners();
+  }
   List<BenchmarkSnapshot> get benchmarkHistory =>
       List<BenchmarkSnapshot>.unmodifiable(_benchmarkHistory);
   BenchmarkSnapshot? get latestBenchmark => _latestBenchmark;
@@ -138,6 +144,22 @@ class AppController extends ChangeNotifier {
   void updateConnectionConfig(ConnectionConfig config) {
     _connectionConfig = config;
     notifyListeners();
+  }
+
+  /// Automatically retrieves the active Wi-Fi Gateway / Hotspot Leader IP
+  /// from the native platform and populates client connection settings.
+  Future<String?> fetchWifiGatewayIp() async {
+    final String? gateway = await _nativeBridgeService.getWifiGatewayIp();
+    if (gateway != null && gateway.isNotEmpty) {
+      updateConnectionConfig(
+        _connectionConfig.copyWith(
+          host: gateway,
+          runAsServer: false,
+        ),
+      );
+      return gateway;
+    }
+    return null;
   }
 
   Future<void> connect() async {

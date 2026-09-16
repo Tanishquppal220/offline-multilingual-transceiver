@@ -18,13 +18,16 @@ class TalkScreen extends StatefulWidget {
 
 class _TalkScreenState extends State<TalkScreen> {
   late final TextEditingController _hostController;
+  String? _gatewayStatusMessage;
+  bool _isGatewayError = false;
+  bool _isDetectingGateway = false;
 
   @override
   void initState() {
     super.initState();
     final String host = widget.controller.connectionConfig.host;
     _hostController = TextEditingController(
-      text: host.isEmpty ? '192.168.4.1' : host,
+      text: host.isEmpty ? '' : host,
     );
   }
 
@@ -32,6 +35,50 @@ class _TalkScreenState extends State<TalkScreen> {
   void dispose() {
     _hostController.dispose();
     super.dispose();
+  }
+
+  Future<void> _autoDetectGateway({bool showFeedback = true}) async {
+    setState(() {
+      _isDetectingGateway = true;
+    });
+
+    final String? gateway = await widget.controller.fetchWifiGatewayIp();
+    if (!mounted) return;
+
+    if (gateway != null && gateway.isNotEmpty) {
+      setState(() {
+        _hostController.text = gateway;
+        _gatewayStatusMessage = '🟢 Gateway: $gateway (Connected to operator)';
+        _isGatewayError = false;
+        _isDetectingGateway = false;
+      });
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Auto-detected Leader Gateway: $gateway'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: AppColors.surfaceContainerHigh,
+          ),
+        );
+      }
+    } else {
+      setState(() {
+        _gatewayStatusMessage =
+            '⚠️ You are not connected to the operator. Please check Wi-Fi.';
+        _isGatewayError = true;
+        _isDetectingGateway = false;
+      });
+      if (showFeedback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'You are not connected to the operator. Please check Wi-Fi.'),
+            duration: Duration(seconds: 3),
+            backgroundColor: AppColors.errorContainer,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -237,9 +284,12 @@ class _TalkScreenState extends State<TalkScreen> {
                     constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
-                      onTap: () => controller.updateConnectionConfig(
-                        config.copyWith(runAsServer: false),
-                      ),
+                      onTap: () {
+                        controller.updateConnectionConfig(
+                          config.copyWith(runAsServer: false),
+                        );
+                        _autoDetectGateway(showFeedback: true);
+                      },
                       child: Center(
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
@@ -287,17 +337,104 @@ class _TalkScreenState extends State<TalkScreen> {
           if (!config.runAsServer) ...<Widget>[
             const SizedBox(height: 8),
             SizedBox(
-              height: 42,
+              height: 44,
               child: TextField(
                 controller: _hostController,
                 style: AppTypography.telemetryMd.copyWith(fontSize: 13),
-                decoration: const InputDecoration(
-                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  hintText: 'Leader IP: 192.168.4.1',
-                  prefixIcon: Icon(Icons.router, size: 16, color: AppColors.outlineVariant),
+                decoration: InputDecoration(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  hintText: 'Leader IP: auto-detecting...',
+                  prefixIcon: const Icon(Icons.router,
+                      size: 16, color: AppColors.outlineVariant),
+                  suffixIcon: Semantics(
+                    button: true,
+                    label: 'Detect Wi-Fi Gateway IP from Android',
+                    child: ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(minHeight: 48, minWidth: 48),
+                      child: IconButton(
+                        icon: _isDetectingGateway
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.secondary,
+                                ),
+                              )
+                            : const Icon(Icons.sync,
+                                size: 18, color: AppColors.secondary),
+                        tooltip: 'Auto-detect Leader Gateway IP',
+                        onPressed: () => _autoDetectGateway(showFeedback: true),
+                      ),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _isGatewayError
+                          ? AppColors.error.withValues(alpha: 0.8)
+                          : AppColors.outline,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: _isGatewayError
+                          ? AppColors.error
+                          : AppColors.secondary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
               ),
             ),
+            if (_gatewayStatusMessage != null) ...<Widget>[
+              const SizedBox(height: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _isGatewayError
+                      ? AppColors.errorContainer.withValues(alpha: 0.35)
+                      : AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: _isGatewayError
+                        ? AppColors.error.withValues(alpha: 0.6)
+                        : AppColors.tertiary.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      _isGatewayError
+                          ? Icons.warning_amber_rounded
+                          : Icons.check_circle_outline,
+                      size: 14,
+                      color:
+                          _isGatewayError ? AppColors.error : AppColors.tertiary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _gatewayStatusMessage!,
+                        style: AppTypography.labelCaps.copyWith(
+                          color: _isGatewayError
+                              ? AppColors.onErrorContainer
+                              : AppColors.tertiary,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 10),
 
@@ -319,6 +456,14 @@ class _TalkScreenState extends State<TalkScreen> {
                 elevation: 0,
               ),
               onPressed: () async {
+                if (!config.runAsServer &&
+                    _hostController.text.trim().isEmpty) {
+                  await _autoDetectGateway(showFeedback: true);
+                  if (_isGatewayError ||
+                      _hostController.text.trim().isEmpty) {
+                    return;
+                  }
+                }
                 controller.updateConnectionConfig(
                   config.copyWith(
                     host: _hostController.text.trim().isEmpty

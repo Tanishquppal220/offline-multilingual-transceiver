@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 
@@ -204,6 +205,39 @@ class NativeBridgeService {
     try {
       await _methodChannel.invokeMethod<dynamic>('stopLocationUpdates');
     } catch (_) {}
+  }
+
+  Future<String?> getWifiGatewayIp() async {
+    try {
+      final String? ip =
+          await _methodChannel.invokeMethod<String>('getWifiGatewayIp');
+      if (ip != null && ip.trim().isNotEmpty && ip != '0.0.0.0') {
+        return ip.trim();
+      }
+    } catch (_) {}
+
+    // Pure Dart local network fallback when native channel is unavailable
+    try {
+      final List<NetworkInterface> interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final NetworkInterface iface in interfaces) {
+        final String name = iface.name.toLowerCase();
+        if (name.contains('wlan') ||
+            name.contains('wifi') ||
+            name.contains('swlan')) {
+          for (final InternetAddress addr in iface.addresses) {
+            final List<String> parts = addr.address.split('.');
+            if (parts.length == 4) {
+              return '${parts[0]}.${parts[1]}.${parts[2]}.1';
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   Future<bool> _invoke(String method, [Map<String, dynamic>? args]) async {
