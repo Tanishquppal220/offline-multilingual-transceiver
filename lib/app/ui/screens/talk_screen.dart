@@ -1,17 +1,43 @@
 import 'package:flutter/material.dart';
 
+import '../../models/connection_config.dart';
 import '../../models/operation_mode.dart';
+import '../../models/speech_message.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/language_picker_sheet.dart';
+import '../widgets/pulsing_dot.dart';
 
-class TalkScreen extends StatelessWidget {
+class TalkScreen extends StatefulWidget {
   const TalkScreen({super.key, required this.controller});
 
   final AppController controller;
 
   @override
+  State<TalkScreen> createState() => _TalkScreenState();
+}
+
+class _TalkScreenState extends State<TalkScreen> {
+  late final TextEditingController _hostController;
+
+  @override
+  void initState() {
+    super.initState();
+    final String host = widget.controller.connectionConfig.host;
+    _hostController = TextEditingController(
+      text: host.isEmpty ? '192.168.4.1' : host,
+    );
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final AppController controller = widget.controller;
+    final ConnectionConfig config = controller.connectionConfig;
     final bool isHandsFree =
         controller.operationMode == OperationMode.continuous;
 
@@ -22,114 +48,346 @@ class TalkScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // 1. Tactical Quick Controls Bar (Interactive Language Chip & Mode Switcher)
-            _buildControlBar(context, isHandsFree),
-            const SizedBox(height: 18),
+            // 1. Team Mesh Network Card
+            _buildTeamMeshCard(controller, config),
+            const SizedBox(height: 12),
 
-            // 2. Central Push-to-Talk Station
-            _buildPttStation(isHandsFree),
-            const SizedBox(height: 18),
-
-            // 3. Unified Transmission Monitor (Waveform + Live Transcript)
-            _buildTransmissionMonitor(),
+            // 2. Walkie-Talkie Operation Mode Switcher
+            _buildModeSwitcher(controller, isHandsFree),
             const SizedBox(height: 16),
 
-            // 4. Compact Emergency SOS Broadcast Trigger
-            _buildEmergencySosBar(),
+            // 3. Central Push-to-Talk Station
+            _buildPttStation(controller, isHandsFree),
+            const SizedBox(height: 16),
+
+            // 4. Unified Transmission Monitor (Waveform + Live Transcript)
+            _buildTransmissionMonitor(controller),
+            const SizedBox(height: 16),
+
+            // 5. Compact Emergency SOS Broadcast Trigger
+            _buildEmergencySosBar(controller),
           ],
         ),
       ),
     );
   }
 
-  /// Compact top bar combining 1-tap language selector and walkie-talkie mode switch
-  Widget _buildControlBar(BuildContext context, bool isHandsFree) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: <Widget>[
-        // Interactive Language Picker Chip
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () => LanguagePickerSheet.show(context, controller),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.secondary.withValues(alpha: 0.6),
-                    width: 1,
+  /// Tactical Team Mesh control card directly on the operational talk screen
+  Widget _buildTeamMeshCard(AppController controller, ConnectionConfig config) {
+    final bool connected = controller.isConnected;
+
+    if (connected) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.tertiary.withValues(alpha: 0.6)),
+        ),
+        child: Row(
+          children: <Widget>[
+            const PulsingDot(color: AppColors.tertiary, size: 8, ping: true),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(
+                    config.runAsServer ? 'HOST MESH ACTIVE' : 'SQUAD LINKED',
+                    style: AppTypography.labelCaps.copyWith(
+                      color: AppColors.tertiary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const Icon(
-                      Icons.translate,
-                      color: AppColors.secondary,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      controller.selectedLanguage.label,
-                      style: AppTypography.labelCaps.copyWith(
-                        color: AppColors.onSurface,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.arrow_drop_down,
+                  Text(
+                    config.runAsServer
+                        ? 'Broadcasting on Port 7070'
+                        : 'Connected to ${config.host}',
+                    style: AppTypography.bodySm.copyWith(
                       color: AppColors.onSurfaceVariant,
-                      size: 18,
+                      fontSize: 11,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+              child: Center(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () => controller.disconnect(),
+                  child: Text(
+                    'DISCONNECT',
+                    style: AppTypography.labelCaps.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ),
+      );
+    }
 
-        // Walkie-Talkie Mode Switcher
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.outline),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
             children: <Widget>[
-              _ModePill(
-                label: 'PTT',
-                active: !isHandsFree,
-                onTap: () => controller.setOperationMode(
-                  OperationMode.walkieTalkie,
-                ),
+              const Icon(Icons.wifi_tethering, color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'TEAM MESH NETWORK',
+                style: AppTypography.labelCaps.copyWith(fontSize: 11),
               ),
-              _ModePill(
-                label: 'HANDS-FREE',
-                active: isHandsFree,
-                onTap: () => controller.setOperationMode(
-                  OperationMode.continuous,
+              const Spacer(),
+              Text(
+                'OFFLINE DIRECT',
+                style: AppTypography.telemetrySm.copyWith(
+                  fontSize: 10,
+                  color: AppColors.secondary,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+
+          // Segmented Role Toggle
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.outline),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => controller.updateConnectionConfig(
+                        config.copyWith(runAsServer: true),
+                      ),
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: config.runAsServer
+                                ? AppColors.tertiaryContainer
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Icon(
+                                Icons.hub,
+                                size: 14,
+                                color: config.runAsServer
+                                    ? AppColors.onTertiaryContainer
+                                    : AppColors.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'HOST MESH',
+                                style: AppTypography.labelCaps.copyWith(
+                                  color: config.runAsServer
+                                      ? AppColors.onTertiaryContainer
+                                      : AppColors.onSurfaceVariant,
+                                  fontWeight: config.runAsServer
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => controller.updateConnectionConfig(
+                        config.copyWith(runAsServer: false),
+                      ),
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: !config.runAsServer
+                                ? AppColors.secondaryContainer
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Icon(
+                                Icons.link,
+                                size: 14,
+                                color: !config.runAsServer
+                                    ? AppColors.onSecondaryContainer
+                                    : AppColors.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'JOIN SQUAD',
+                                style: AppTypography.labelCaps.copyWith(
+                                  color: !config.runAsServer
+                                      ? AppColors.onSecondaryContainer
+                                      : AppColors.onSurfaceVariant,
+                                  fontWeight: !config.runAsServer
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!config.runAsServer) ...<Widget>[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 42,
+              child: TextField(
+                controller: _hostController,
+                style: AppTypography.telemetryMd.copyWith(fontSize: 13),
+                decoration: const InputDecoration(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  hintText: 'Leader IP: 192.168.4.1',
+                  prefixIcon: Icon(Icons.router, size: 16, color: AppColors.outlineVariant),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // Connect Button
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: config.runAsServer
+                    ? AppColors.tertiary
+                    : AppColors.secondary,
+                foregroundColor: config.runAsServer
+                    ? AppColors.onTertiary
+                    : AppColors.onSecondary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                controller.updateConnectionConfig(
+                  config.copyWith(
+                    host: _hostController.text.trim().isEmpty
+                        ? '192.168.4.1'
+                        : _hostController.text.trim(),
+                    port: ConnectionConfig.networkPort,
+                  ),
+                );
+                await controller.connect();
+              },
+              icon: Icon(
+                config.runAsServer ? Icons.sensors : Icons.link,
+                size: 16,
+                color: config.runAsServer
+                    ? AppColors.onTertiary
+                    : AppColors.onSecondary,
+              ),
+              label: Text(
+                config.runAsServer ? 'START LEADER MESH' : 'CONNECT TO LEADER',
+                style: AppTypography.labelCaps.copyWith(
+                  color: config.runAsServer
+                      ? AppColors.onTertiary
+                      : AppColors.onSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Ergonomic mode switcher between Push-to-Talk and continuous Hands-Free
+  Widget _buildModeSwitcher(AppController controller, bool isHandsFree) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.outline),
         ),
-      ],
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            _ModePill(
+              label: 'PTT',
+              active: !isHandsFree,
+              onTap: () => controller.setOperationMode(
+                OperationMode.walkieTalkie,
+              ),
+            ),
+            _ModePill(
+              label: 'HANDS-FREE',
+              active: isHandsFree,
+              onTap: () => controller.setOperationMode(
+                OperationMode.continuous,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   /// Ergonomic, focused Push-to-Talk circular station
-  Widget _buildPttStation(bool isHandsFree) {
+  Widget _buildPttStation(AppController controller, bool isHandsFree) {
     final bool active = controller.isListening;
 
     return Center(
@@ -248,14 +506,22 @@ class TalkScreen extends StatelessWidget {
   }
 
   /// Unified card showing real-time audio waveform and live STT transcription
-  Widget _buildTransmissionMonitor() {
+  Widget _buildTransmissionMonitor(AppController controller) {
     final bool isListening = controller.isListening;
     final String transcript = controller.partialTranscript.trim();
+    final SpeechMessage? lastMsg =
+        controller.history.isNotEmpty ? controller.history.first : null;
+
+    final String titleText = isListening
+        ? 'LIVE TRANSMISSION • ${controller.userProfile.callsign.toUpperCase()}'
+        : (lastMsg != null
+            ? 'FROM: ${lastMsg.senderCallsign?.toUpperCase() ?? "REMOTE UNIT"} [${lastMsg.senderRole?.toUpperCase() ?? "RADIO"}]'
+            : 'WHAT WAS HEARD');
 
     final String displayText = transcript.isNotEmpty
         ? '“$transcript”'
-        : (controller.history.isNotEmpty
-            ? '“${controller.history.first.message}”'
+        : (lastMsg != null
+            ? '“${lastMsg.message}”'
             : '“Team standby. Ready for voice mesh transmission.”');
 
     return Container(
@@ -271,23 +537,29 @@ class TalkScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Icon(
-                    isListening ? Icons.graphic_eq : Icons.record_voice_over,
-                    color: isListening ? AppColors.primary : AppColors.secondary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    isListening ? 'LIVE AUDIO' : 'WHAT WAS HEARD',
-                    style: AppTypography.labelCaps.copyWith(
-                      color: isListening ? AppColors.primary : AppColors.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
+              Expanded(
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      isListening ? Icons.graphic_eq : Icons.record_voice_over,
+                      color: isListening ? AppColors.primary : AppColors.secondary,
+                      size: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        titleText,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTypography.labelCaps.copyWith(
+                          color: isListening ? AppColors.primary : AppColors.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               // Live waveform equalizer bars
               Row(
                 children: List<Widget>.generate(6, (int i) {
@@ -321,14 +593,57 @@ class TalkScreen extends StatelessWidget {
                     : Colors.transparent,
               ),
             ),
-            child: Text(
-              displayText,
-              style: AppTypography.headlineSm.copyWith(
-                color: AppColors.onSurface,
-                height: 1.35,
-                fontSize: 15,
-                fontWeight: transcript.isNotEmpty ? FontWeight.w600 : FontWeight.w400,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  displayText,
+                  style: AppTypography.headlineSm.copyWith(
+                    color: AppColors.onSurface,
+                    height: 1.35,
+                    fontSize: 15,
+                    fontWeight: transcript.isNotEmpty ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+                if (!isListening && lastMsg?.location != null) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.location_on, size: 13, color: AppColors.tertiary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'GPS: ${lastMsg!.location!.formattedCoordinates}${lastMsg.location!.accuracyLabel.isNotEmpty ? " • ${lastMsg.location!.accuracyLabel}" : ""}',
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.telemetrySm.copyWith(
+                            color: AppColors.tertiary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (isListening && controller.currentLocation != null) ...<Widget>[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.location_on, size: 13, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'ATTACHED GPS: ${controller.currentLocation!.compactCoordinates}',
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.telemetrySm.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -337,7 +652,7 @@ class TalkScreen extends StatelessWidget {
   }
 
   /// Compact, high-contrast emergency broadcast button
-  Widget _buildEmergencySosBar() {
+  Widget _buildEmergencySosBar(AppController controller) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -386,23 +701,28 @@ class TalkScreen extends StatelessWidget {
               ],
             ),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              elevation: 0,
-            ),
-            onPressed: () => controller.sendEmergencyPreset(),
-            child: Text(
-              'BROADCAST',
-              style: AppTypography.labelCaps.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Center(
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  elevation: 0,
+                ),
+                onPressed: () => controller.sendEmergencyPreset(),
+                child: Text(
+                  'BROADCAST',
+                  style: AppTypography.labelCaps.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ),
           ),

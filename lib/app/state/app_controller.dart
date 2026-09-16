@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 
 import '../models/benchmark_models.dart';
 import '../models/connection_config.dart';
+import '../models/gps_location.dart';
 import '../models/language_option.dart';
 import '../models/operation_mode.dart';
 import '../models/speech_message.dart';
+import '../models/user_profile.dart';
 import '../services/benchmark_export_service.dart';
 import '../services/benchmark_history_storage_service.dart';
 import '../services/benchmark_tracker.dart';
 import '../services/native_bridge_service.dart';
 import '../services/tcp_message_service.dart';
+import '../services/user_profile_storage_service.dart';
 
 class AppController extends ChangeNotifier {
   static const int _maxBenchmarkHistory = 50;
@@ -22,19 +25,23 @@ class AppController extends ChangeNotifier {
     BenchmarkTracker? benchmarkTracker,
     BenchmarkExportService? benchmarkExportService,
     BenchmarkHistoryStorageService? benchmarkHistoryStorageService,
+    UserProfileStorageService? userProfileStorageService,
   })  : _nativeBridgeService = nativeBridgeService ?? NativeBridgeService(),
         _tcpMessageService = tcpMessageService ?? TcpMessageService(),
         _benchmarkTracker = benchmarkTracker ?? BenchmarkTracker(),
         _benchmarkExportService =
             benchmarkExportService ?? const BenchmarkExportService(),
         _benchmarkHistoryStorageService =
-            benchmarkHistoryStorageService ?? BenchmarkHistoryStorageService();
+            benchmarkHistoryStorageService ?? BenchmarkHistoryStorageService(),
+        _userProfileStorageService =
+            userProfileStorageService ?? UserProfileStorageService();
 
   final NativeBridgeService _nativeBridgeService;
   final TcpMessageService _tcpMessageService;
   final BenchmarkTracker _benchmarkTracker;
   final BenchmarkExportService _benchmarkExportService;
   final BenchmarkHistoryStorageService _benchmarkHistoryStorageService;
+  final UserProfileStorageService _userProfileStorageService;
 
   StreamSubscription<NativeEvent>? _nativeEventsSub;
   bool _initialized = false;
@@ -55,6 +62,9 @@ class AppController extends ChangeNotifier {
   final Map<String, SpeechMessage> _messageById = <String, SpeechMessage>{};
   BenchmarkSnapshot? _latestBenchmark;
   String? _activeMessageId;
+  UserProfile _userProfile = UserProfile.initial;
+  GpsLocation? _currentLocation;
+  bool _profileSetupNeeded = false;
 
   bool get isConnected => _isConnected;
   bool get isListening => _isListening;
@@ -68,6 +78,9 @@ class AppController extends ChangeNotifier {
   OperationMode get operationMode => _operationMode;
   LanguageOption get selectedLanguage => _selectedLanguage;
   ConnectionConfig get connectionConfig => _connectionConfig;
+  UserProfile get userProfile => _userProfile;
+  GpsLocation? get currentLocation => _currentLocation;
+  bool get profileSetupNeeded => _profileSetupNeeded;
   List<SpeechMessage> get history => List<SpeechMessage>.unmodifiable(_history);
   List<BenchmarkSnapshot> get benchmarkHistory =>
       List<BenchmarkSnapshot>.unmodifiable(_benchmarkHistory);
@@ -88,6 +101,22 @@ class AppController extends ChangeNotifier {
 
     _nativeEventsSub = _nativeBridgeService.events.listen(_handleNativeEvent);
     await _nativeBridgeService.initialize(languageCode: _selectedLanguage.code);
+
+    final UserProfile? persistedProfile =
+        await _userProfileStorageService.load(
+      appDataPathProvider: _nativeBridgeService.getAppDataDirectoryPath,
+    );
+    if (persistedProfile != null && persistedProfile.isConfigured) {
+      _userProfile = persistedProfile;
+      _profileSetupNeeded = false;
+    } else {
+      _profileSetupNeeded = true;
+    }
+
+    try {
+      await _nativeBridgeService.startLocationUpdates();
+      _currentLocation = await _nativeBridgeService.getCurrentLocation();
+    } catch (_) {}
 
     final PersistedBenchmarkHistory persistedHistory =
         await _benchmarkHistoryStorageService.load(
@@ -218,6 +247,26 @@ class AppController extends ChangeNotifier {
     await _nativeBridgeService.stopListening();
   }
 
+  Future<void> saveUserProfile(UserProfile profile) async {
+    _userProfile = profile.copyWith(isConfigured: true);
+    _profileSetupNeeded = false;
+    notifyListeners();
+    await _userProfileStorageService.save(
+      profile: _userProfile,
+      appDataPathProvider: _nativeBridgeService.getAppDataDirectoryPath,
+    );
+  }
+
+  Future<void> refreshLocation() async {
+    try {
+      final GpsLocation? loc = await _nativeBridgeService.getCurrentLocation();
+      if (loc != null) {
+        _currentLocation = loc;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   Future<void> sendTypedMessage(String text, {bool emergency = false}) async {
     final String cleaned = text.trim();
     if (cleaned.isEmpty) {
@@ -237,13 +286,23 @@ class AppController extends ChangeNotifier {
       message: cleaned,
       timestamp: DateTime.now(),
       origin: MessageOrigin.local,
+      senderCallsign: _userProfile.callsign,
+      senderRole: _userProfile.role,
+      senderSquad: _userProfile.squad,
+      location: _userProfile.shareLocation ? _currentLocation : null,
     );
 
     await _sendOutgoingMessage(message);
   }
 
   Future<void> sendEmergencyPreset() {
-    return sendTypedMessage('Medical assistance required', emergency: true);
+    final String locStr = _currentLocation != null
+        ? ' [GPS: ${_currentLocation!.compactCoordinates}]'
+        : '';
+    return sendTypedMessage(
+      'Medical assistance required for ${_userProfile.callsign} (${_userProfile.role})$locStr',
+      emergency: true,
+    );
   }
 
   void clearHistory() {
@@ -406,6 +465,10 @@ class AppController extends ChangeNotifier {
             message: transcript,
             timestamp: DateTime.now(),
             origin: MessageOrigin.local,
+            senderCallsign: _userProfile.callsign,
+            senderRole: _userProfile.role,
+            senderSquad: _userProfile.squad,
+            location: _userProfile.shareLocation ? _currentLocation : null,
           );
           unawaited(_sendOutgoingMessage(outgoing));
         }
@@ -677,6 +740,7 @@ class AppController extends ChangeNotifier {
     if (nativeEventsSub != null) {
       unawaited(nativeEventsSub.cancel());
     }
+    unawaited(_nativeBridgeService.stopLocationUpdates());
     unawaited(_nativeBridgeService.dispose());
     unawaited(_tcpMessageService.close());
     super.dispose();

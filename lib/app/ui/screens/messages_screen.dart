@@ -125,7 +125,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        'CRITICAL EMERGENCY',
+                        msg.senderCallsign != null
+                            ? '${msg.senderCallsign!.toUpperCase()} • ${msg.senderRole?.toUpperCase() ?? "EMERGENCY"}'
+                            : 'CRITICAL EMERGENCY',
                         style: AppTypography.headlineSm.copyWith(
                           color: AppColors.error,
                           fontWeight: FontWeight.w700,
@@ -167,6 +169,31 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ),
               ),
             ),
+            if (msg.location != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.error.withValues(alpha: 0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Icon(Icons.location_on, size: 14, color: AppColors.error),
+                    const SizedBox(width: 4),
+                    Text(
+                      'LOCATION: ${msg.location!.formattedCoordinates} (${msg.location!.accuracyLabel})',
+                      style: AppTypography.telemetrySm.copyWith(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -210,9 +237,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('Remote Unit', style: AppTypography.headlineSm),
                         Text(
-                          '${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
+                          msg.senderCallsign ?? 'Remote Unit',
+                          style: AppTypography.headlineSm,
+                        ),
+                        Text(
+                          '${msg.senderRole != null ? "${msg.senderRole} • " : ""}${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
                           style: AppTypography.telemetrySm,
                         ),
                       ],
@@ -240,6 +270,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
               '“${msg.message}”',
               style: AppTypography.bodyLg.copyWith(color: AppColors.onSurface),
             ),
+            if (msg.location != null) ...<Widget>[
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Icon(Icons.location_on, size: 13, color: AppColors.tertiary),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${msg.location!.formattedCoordinates} ${msg.location!.accuracyLabel}',
+                    style: AppTypography.telemetrySm.copyWith(
+                      color: AppColors.tertiary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       );
@@ -264,7 +311,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                Text('YOU SENT', style: AppTypography.labelCaps.copyWith(color: AppColors.primary)),
+                Text(
+                  'YOU (${controller.userProfile.callsign.toUpperCase()})',
+                  style: AppTypography.labelCaps.copyWith(color: AppColors.primary),
+                ),
                 Text(
                   '${msg.timestamp.hour}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
                   style: AppTypography.telemetrySm,
@@ -278,13 +328,32 @@ class _MessagesScreenState extends State<MessagesScreen> {
             ),
             const SizedBox(height: 4),
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: <Widget>[
-                const Icon(Icons.done_all, size: 14, color: AppColors.tertiary),
-                const SizedBox(width: 4),
-                Text(
-                  'Delivered to mesh',
-                  style: AppTypography.telemetrySm.copyWith(color: AppColors.tertiary),
+                if (msg.location != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const Icon(Icons.location_on, size: 12, color: AppColors.outlineVariant),
+                      const SizedBox(width: 3),
+                      Text(
+                        msg.location!.compactCoordinates,
+                        style: AppTypography.telemetrySm.copyWith(color: AppColors.outlineVariant),
+                      ),
+                    ],
+                  )
+                else
+                  const SizedBox.shrink(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Icon(Icons.done_all, size: 14, color: AppColors.tertiary),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Delivered to mesh',
+                      style: AppTypography.telemetrySm.copyWith(color: AppColors.tertiary),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -377,7 +446,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
               16,
               2,
               16,
-              MediaQuery.paddingOf(context).bottom + 74,
+              MediaQuery.paddingOf(context).bottom + 10,
             ),
             child: Row(
               children: <Widget>[
@@ -409,8 +478,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 ),
                 const SizedBox(width: 8),
                 SizedBox(
-                  width: 44,
-                  height: 44,
+                  width: 48,
+                  height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,

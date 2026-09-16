@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import '../models/gps_location.dart';
 import '../models/operation_mode.dart';
 
 enum NativeEventType {
@@ -168,6 +169,41 @@ class NativeBridgeService {
     } on PlatformException {
       return null;
     }
+  }
+
+  Future<GpsLocation?> getCurrentLocation() async {
+    try {
+      final Object? raw =
+          await _methodChannel.invokeMethod<dynamic>('getLocation');
+      if (raw is Map) {
+        return GpsLocation.fromJson(Map<String, dynamic>.from(raw));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> hasLocationPermission() async {
+    try {
+      final bool? res =
+          await _methodChannel.invokeMethod<bool>('hasLocationPermission');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> startLocationUpdates() async {
+    try {
+      await _methodChannel.invokeMethod<dynamic>('startLocationUpdates');
+    } catch (_) {}
+  }
+
+  Future<void> stopLocationUpdates() async {
+    try {
+      await _methodChannel.invokeMethod<dynamic>('stopLocationUpdates');
+    } catch (_) {}
   }
 
   Future<bool> _invoke(String method, [Map<String, dynamic>? args]) async {

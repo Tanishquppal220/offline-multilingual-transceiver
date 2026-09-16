@@ -95,6 +95,7 @@ package com.sih.voicebridge.bridge
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.sih.voicebridge.location.LocationHelper
 import com.sih.voicebridge.pipeline.VoicePipelineOrchestrator
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -105,6 +106,8 @@ class NativeBridgeHandler(
 ) : MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
     private val appContext = context.applicationContext
+
+    private val locationHelper = LocationHelper(appContext)
 
     private val mainHandler =
         Handler(Looper.getMainLooper())
@@ -252,6 +255,24 @@ class NativeBridgeHandler(
                     )
                 }
 
+                "getLocation" -> {
+                    result.success(locationHelper.getCurrentLocation())
+                }
+
+                "hasLocationPermission" -> {
+                    result.success(locationHelper.hasLocationPermission())
+                }
+
+                "startLocationUpdates" -> {
+                    locationHelper.startListening()
+                    result.success(true)
+                }
+
+                "stopLocationUpdates" -> {
+                    locationHelper.stopListening()
+                    result.success(true)
+                }
+
                 else -> {
                     result.notImplemented()
                 }
@@ -291,6 +312,11 @@ class NativeBridgeHandler(
         }
 
         disposed = true
+
+        /*
+         * Stop location updates.
+         */
+        locationHelper.stopListening()
 
         /*
          * Stop future events from reaching Flutter.

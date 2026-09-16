@@ -24,28 +24,46 @@ Typed messages can also be sent and converted to speech.
 
 ## Technology Stack
 
-- **Flutter / Dart** — application UI
+- **Flutter / Dart** — tactical transceiver UI
 - **Kotlin** — native Android integration
 - **Sherpa-ONNX** — offline speech processing
 - **ONNX** — local speech models
 - **TCP sockets** — local-network communication
 - **Android** — target platform
 
+## UI & User Flow Documentation
+
+For the complete interactive component map, visual information architecture, and end-to-end user journeys (with Mermaid diagrams), see:
+👉 **[UI Map, Architecture & User Flow Guide](docs/UI_MAP_AND_USER_FLOWS.md)**
+
 ## Project Structure
 
 ```
-SIH/
+offline-multilingual-transceiver/
 ├── android/
-│   └── app/src/main/kotlin/
+│   └── app/src/main/kotlin/com/sih/voicebridge/
 ├── assets/
-│   └── models/
-│       ├── stt/
-│       └── tts/
+│   └── models/stt/ (10 Indian regional language models)
+├── docs/
+│   └── UI_MAP_AND_USER_FLOWS.md (Complete UI Map & Flow Guide)
 ├── lib/
-│   ├── models/
-│   ├── screens/
-│   ├── services/
-│   └── widgets/
+│   ├── main.dart
+│   └── app/
+│       ├── app.dart
+│       ├── models/        # Data models (benchmark, speech message, etc.)
+│       ├── services/      # TCP mesh, native bridge, benchmark tracker
+│       ├── state/         # AppController (reactive ChangeNotifier)
+│       ├── theme/         # Tactical dark theme, colors, typography
+│       └── ui/
+│           ├── app_shell.dart          # 2-tab navigation (Talk & Messages)
+│           ├── screens/
+│           │   ├── talk_screen.dart    # PTT walkie-talkie & mesh controls
+│           │   └── messages_screen.dart # Chat stream, presets & compose
+│           └── widgets/
+│               ├── tactical_header.dart       # Global header & lang chip
+│               ├── language_picker_sheet.dart # 10-language bottom sheet
+│               └── radio_settings_sheet.dart  # Volume & telemetry sheet
+├── test/                  # Unit and accessibility test suites
 ├── pubspec.yaml
 └── README.md
 ```
@@ -155,15 +173,17 @@ Messages are transmitted as text rather than raw voice audio. The receiving devi
 Most UI development happens inside:
 
 ```
-lib/
+lib/app/ui/
 ```
 
 Start by exploring:
 
 ```
-lib/screens/
-lib/widgets/
+lib/app/ui/screens/
+lib/app/ui/widgets/
 ```
+
+Before contributing or modifying UI components, please read **[docs/UI_MAP_AND_USER_FLOWS.md](docs/UI_MAP_AND_USER_FLOWS.md)** for detailed design patterns, state bindings, and touch target standards.
 
 UI contributors can work on:
 

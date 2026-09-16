@@ -60,7 +60,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     companion object {
-        private const val MICROPHONE_PERMISSION_REQUEST_CODE = 9101
+        private const val PERMISSION_REQUEST_CODE = 9101
     }
 
     private lateinit var nativeBridgeHandler: NativeBridgeHandler
@@ -70,7 +70,7 @@ class MainActivity : FlutterActivity() {
     ) {
         super.configureFlutterEngine(flutterEngine)
 
-        ensureMicrophonePermission()
+        ensurePermissions()
 
         nativeBridgeHandler =
             NativeBridgeHandler(this)
@@ -90,20 +90,28 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private fun ensureMicrophonePermission() {
-        if (
-            checkSelfPermission(
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            return
+    private fun ensurePermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
         }
 
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.RECORD_AUDIO),
-            MICROPHONE_PERMISSION_REQUEST_CODE,
-        )
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+
+        if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                permissionsToRequest.toTypedArray(),
+                PERMISSION_REQUEST_CODE,
+            )
+        }
     }
 
     override fun onDestroy() {
