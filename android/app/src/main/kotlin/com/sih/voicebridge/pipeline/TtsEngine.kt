@@ -1,15 +1,13 @@
 package com.sih.voicebridge.pipeline
 
 import android.content.Context
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import org.json.JSONException
-import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.util.ArrayDeque
 import java.util.Locale
 
@@ -27,185 +25,109 @@ private data class PendingTtsRequest(
     val onPlaybackFinished: (() -> Unit)?,
 )
 
-private interface TtsBackend {
-    val backendName: String
-
-    fun speak(request: PendingTtsRequest): Boolean
-
-    fun shutdown()
-}
-
-private data class TtsModelSpec(
-    val languageCode: String,
-    val backend: String,
-    val modelAssetPath: String?,
-    val tokensAssetPath: String?,
-    val dataDirAssetPath: String?,
-    val lexiconAssetPath: String?,
+internal data class SpeechResolution(
+    val locale: Locale,
+    val spokenText: String,
+    val resolvedLanguageCode: String,
 )
 
-private data class ResolvedTtsModel(
-    val languageCode: String,
-    val backend: String,
-    val modelFile: File?,
-    val tokensFile: File?,
-    val dataDir: File?,
-    val lexiconFile: File?,
-)
+internal fun resolveSpeechLocaleAndText(rawText: String, requestedLangCode: String): SpeechResolution {
+    // 1. Sanitize text for clean speech synthesis:
+    // Strip technical GPS coordinate brackets like [GPS: 31.2526, 75.7025]
+    var clean = rawText
+        .replace(Regex("\\[GPS:[^\\]]*\\]", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("[\\p{So}\\p{Cn}]"), "") // Strip emoji symbols (👍, 🆘, 📍, etc.)
+        .replace(Regex("\\s+"), " ")
+        .trim()
 
-private class TtsModelResolver(
-    private val context: Context,
-    private val emitStatus: (String) -> Unit,
-) {
-    companion object {
-        private const val FLUTTER_ASSET_PREFIX = "flutter_assets/"
-        private const val MANIFEST_RELATIVE_PATH = "assets/models/tts/model_manifest.json"
+    if (clean.isBlank()) {
+        clean = rawText
     }
 
-    private var loadedManifest: Map<String, TtsModelSpec> = emptyMap()
-    private var manifestLoaded = false
+    // 2. Count Unicode script characters
+    var latinCount = 0
+    var devanagariCount = 0
+    var tamilCount = 0
+    var teluguCount = 0
+    var kannadaCount = 0
+    var gujaratiCount = 0
+    var malayalamCount = 0
+    var bengaliCount = 0
+    var odiaCount = 0
 
-    fun resolve(languageCode: String): ResolvedTtsModel? {
-        val manifest = loadManifest()
-        if (manifest.isEmpty()) {
-            return null
+    for (ch in clean) {
+        when (ch) {
+            in 'A'..'Z', in 'a'..'z' -> latinCount++
+            in '\u0900'..'\u097F' -> devanagariCount++
+            in '\u0B80'..'\u0BFF' -> tamilCount++
+            in '\u0C00'..'\u0C7F' -> teluguCount++
+            in '\u0C80'..'\u0CFF' -> kannadaCount++
+            in '\u0A80'..'\u0AFF' -> gujaratiCount++
+            in '\u0D00'..'\u0D7F' -> malayalamCount++
+            in '\u0980'..'\u09FF' -> bengaliCount++
+            in '\u0B00'..'\u0B7F' -> odiaCount++
         }
-
-        val spec = manifest[languageCode.lowercase()] ?: return null
-        return ResolvedTtsModel(
-            languageCode = spec.languageCode,
-            backend = spec.backend,
-            modelFile = copyOptional(spec.modelAssetPath),
-            tokensFile = copyOptional(spec.tokensAssetPath),
-            dataDir = copyDirectoryOptional(spec.dataDirAssetPath),
-            lexiconFile = copyOptional(spec.lexiconAssetPath),
-        )
     }
 
-    private fun loadManifest(): Map<String, TtsModelSpec> {
-        if (manifestLoaded) {
-            return loadedManifest
-        }
+    val totalIndic = devanagariCount + tamilCount + teluguCount + kannadaCount +
+        gujaratiCount + malayalamCount + bengaliCount + odiaCount
 
-        manifestLoaded = true
-
-        val manifestPayload = try {
-            context.assets.open("$FLUTTER_ASSET_PREFIX$MANIFEST_RELATIVE_PATH")
-                .bufferedReader()
-                .use { it.readText() }
-        } catch (_: Throwable) {
-            emitStatus("TTS manifest not found at $MANIFEST_RELATIVE_PATH. Using Android TTS fallback.")
-            loadedManifest = emptyMap()
-            return loadedManifest
-        }
-
-        loadedManifest = try {
-            parseManifest(manifestPayload)
-        } catch (error: JSONException) {
-            emitStatus("Invalid TTS manifest JSON: ${error.message}")
-            emptyMap()
-        }
-
-        return loadedManifest
-    }
-
-    @Throws(JSONException::class)
-    private fun parseManifest(payload: String): Map<String, TtsModelSpec> {
-        val root = JSONObject(payload)
-        val languages = if (root.has("languages")) {
-            root.getJSONObject("languages")
-        } else {
-            root
-        }
-
-        val table = mutableMapOf<String, TtsModelSpec>()
-        val keys = languages.keys()
-        while (keys.hasNext()) {
-            val languageCode = keys.next()
-            val node = languages.optJSONObject(languageCode) ?: continue
-
-            table[languageCode.lowercase()] = TtsModelSpec(
-                languageCode = languageCode.lowercase(),
-                backend = node.optString("backend", "android_tts"),
-                modelAssetPath = pickFirstNonBlank(node.optString("model", ""), node.optString("modelAsset", "")),
-                tokensAssetPath = pickFirstNonBlank(node.optString("tokens", ""), node.optString("tokensAsset", "")),
-                dataDirAssetPath = pickFirstNonBlank(node.optString("data", ""), node.optString("dataDir", "")),
-                lexiconAssetPath = pickFirstNonBlank(node.optString("lexicon", ""), node.optString("lexiconAsset", "")),
+    // 3. Resolve target locale based on actual script content:
+    return when {
+        // Pure or predominant Latin/ASCII text: MUST use English voice
+        // (Android Marathi/Hindi TTS fails or mutes when fed Latin ASCII text)
+        latinCount > 0 && totalIndic == 0 -> {
+            SpeechResolution(
+                locale = Locale.US,
+                spokenText = clean,
+                resolvedLanguageCode = "en",
             )
         }
-
-        return table
+        devanagariCount > 0 -> {
+            if (requestedLangCode.equals("mr", ignoreCase = true)) {
+                SpeechResolution(
+                    locale = Locale("mr", "IN"),
+                    spokenText = clean,
+                    resolvedLanguageCode = "mr",
+                )
+            } else {
+                SpeechResolution(
+                    locale = Locale("hi", "IN"),
+                    spokenText = clean,
+                    resolvedLanguageCode = "hi",
+                )
+            }
+        }
+        tamilCount > 0 -> SpeechResolution(Locale("ta", "IN"), clean, "ta")
+        teluguCount > 0 -> SpeechResolution(Locale("te", "IN"), clean, "te")
+        kannadaCount > 0 -> SpeechResolution(Locale("kn", "IN"), clean, "kn")
+        gujaratiCount > 0 -> SpeechResolution(Locale("gu", "IN"), clean, "gu")
+        malayalamCount > 0 -> SpeechResolution(Locale("ml", "IN"), clean, "ml")
+        bengaliCount > 0 -> SpeechResolution(Locale("bn", "IN"), clean, "bn")
+        odiaCount > 0 -> SpeechResolution(Locale("or", "IN"), clean, "or")
+        else -> {
+            SpeechResolution(
+                locale = localeForCode(requestedLangCode),
+                spokenText = clean,
+                resolvedLanguageCode = requestedLangCode.lowercase(),
+            )
+        }
     }
+}
 
-    private fun copyOptional(assetPath: String?): File? {
-        if (assetPath.isNullOrBlank()) {
-            return null
-        }
-
-        val normalized = assetPath.trim().removePrefix("/")
-        val flutterAssetPath = "$FLUTTER_ASSET_PREFIX$normalized"
-        val target = File(context.filesDir, "tts_models/$normalized")
-
-        if (target.exists() && target.length() > 0L) {
-            return target
-        }
-
-        return try {
-            target.parentFile?.mkdirs()
-            context.assets.open(flutterAssetPath).use { input ->
-                FileOutputStream(target).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            target
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
-    private fun copyDirectoryOptional(assetPath: String?): File? {
-        if (assetPath.isNullOrBlank()) {
-            return null
-        }
-
-        val normalized = assetPath.trim().removePrefix("/").trimEnd('/')
-        val flutterPrefix = "$FLUTTER_ASSET_PREFIX$normalized"
-        val targetDir = File(context.filesDir, "tts_models/$normalized")
-        targetDir.mkdirs()
-
-        val children = try {
-            context.assets.list(flutterPrefix)
-        } catch (_: Throwable) {
-            null
-        } ?: return null
-
-        for (child in children) {
-            val childAssetPath = "$flutterPrefix/$child"
-            val childFile = File(targetDir, child)
-            if (childFile.exists() && childFile.length() > 0L) {
-                continue
-            }
-            try {
-                context.assets.open(childAssetPath).use { input ->
-                    FileOutputStream(childFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (_: Throwable) {
-                return null
-            }
-        }
-
-        return targetDir
-    }
-
-    private fun pickFirstNonBlank(vararg values: String?): String? {
-        for (value in values) {
-            if (!value.isNullOrBlank()) {
-                return value
-            }
-        }
-        return null
+internal fun localeForCode(languageCode: String): Locale {
+    return when (languageCode.lowercase()) {
+        "en" -> Locale.US
+        "hi" -> Locale("hi", "IN")
+        "gu" -> Locale("gu", "IN")
+        "mr" -> Locale("mr", "IN")
+        "kn" -> Locale("kn", "IN")
+        "ml" -> Locale("ml", "IN")
+        "ta" -> Locale("ta", "IN")
+        "te" -> Locale("te", "IN")
+        "bn" -> Locale("bn", "IN")
+        "or" -> Locale("or", "IN")
+        else -> Locale.forLanguageTag(languageCode)
     }
 }
 
@@ -214,8 +136,8 @@ private class AndroidSystemTtsBackend(
     private val emitEvent: (Map<String, Any?>) -> Unit,
     private val emitStatus: (String) -> Unit,
     private val emitError: (String?, String) -> Unit,
-) : TtsBackend {
-    override val backendName: String = "android_tts"
+) {
+    val backendName: String = "android_tts"
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val pendingQueue = ArrayDeque<PendingTtsRequest>()
@@ -230,7 +152,7 @@ private class AndroidSystemTtsBackend(
         }
     }
 
-    override fun speak(request: PendingTtsRequest): Boolean {
+    fun speak(request: PendingTtsRequest): Boolean {
         mainHandler.post {
             when (initState) {
                 AndroidTtsInitState.READY -> speakInternal(request)
@@ -244,7 +166,7 @@ private class AndroidSystemTtsBackend(
         return true
     }
 
-    override fun shutdown() {
+    fun shutdown() {
         mainHandler.post {
             for (request in activeByUtteranceId.values) {
                 request.onPlaybackFinished?.invoke()
@@ -296,19 +218,31 @@ private class AndroidSystemTtsBackend(
             return
         }
 
-        val localeStatus = tts.setLanguage(localeForCode(request.languageCode))
+        // Play tactical attention chime for emergency SOS
+        if (request.emergency) {
+            try {
+                val toneGen = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+                toneGen.startTone(ToneGenerator.TONE_PROP_BEEP2, 250)
+            } catch (_: Throwable) {
+                // Ignore audio hardware error
+            }
+        }
+
+        // Script-aware locale and text resolution
+        val resolution = resolveSpeechLocaleAndText(request.text, request.languageCode)
+        val localeStatus = tts.setLanguage(resolution.locale)
         if (localeStatus == TextToSpeech.LANG_NOT_SUPPORTED ||
             localeStatus == TextToSpeech.LANG_MISSING_DATA
         ) {
             tts.setLanguage(Locale.US)
-            emitStatus("TTS locale ${request.languageCode} unavailable, falling back to en-US")
+            emitStatus("TTS locale ${resolution.locale} unavailable, falling back to en-US")
         }
 
         emitEvent(
             mapOf(
                 "type" to "tts_started",
-                "text" to request.text,
-                "languageCode" to request.languageCode,
+                "text" to resolution.spokenText,
+                "languageCode" to resolution.resolvedLanguageCode,
                 "messageId" to request.messageId,
                 "emergency" to request.emergency,
                 "backend" to backendName,
@@ -323,7 +257,7 @@ private class AndroidSystemTtsBackend(
         }
         val queueMode = if (request.emergency) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
 
-        val result = tts.speak(request.text, queueMode, params, utteranceId)
+        val result = tts.speak(resolution.spokenText, queueMode, params, utteranceId)
         if (result == TextToSpeech.ERROR) {
             activeByUtteranceId.remove(utteranceId)
             emitError(request.messageId, "TTS speak() returned error")
@@ -384,171 +318,6 @@ private class AndroidSystemTtsBackend(
         }
         return activeByUtteranceId.remove(utteranceId)
     }
-
-    private fun localeForCode(languageCode: String): Locale {
-        return when (languageCode.lowercase()) {
-            "en" -> Locale.US
-            "hi" -> Locale("hi", "IN")
-            "gu" -> Locale("gu", "IN")
-            "mr" -> Locale("mr", "IN")
-            "kn" -> Locale("kn", "IN")
-            "ml" -> Locale("ml", "IN")
-            "ta" -> Locale("ta", "IN")
-            "te" -> Locale("te", "IN")
-            "bn" -> Locale("bn", "IN")
-            "or" -> Locale("or", "IN")
-            else -> Locale.forLanguageTag(languageCode)
-        }
-    }
-}
-
-private class PiperSherpaTtsBackend(
-    private val modelResolver: TtsModelResolver,
-    private val emitEvent: (Map<String, Any?>) -> Unit,
-    private val emitStatus: (String) -> Unit,
-    private val emitError: (String?, String) -> Unit,
-) : TtsBackend {
-    override val backendName: String = "piper_sherpa"
-
-    private var probeDone = false
-    private var available = false
-    private var warnedUnavailable = false
-
-    override fun speak(request: PendingTtsRequest): Boolean {
-        if (!isAvailable()) {
-            if (!warnedUnavailable) {
-                emitStatus("Piper/Sherpa TTS classes unavailable. Falling back to Android TTS.")
-                warnedUnavailable = true
-            }
-            return false
-        }
-
-        val model = modelResolver.resolve(request.languageCode)
-        if (model == null || model.backend.lowercase() != backendName) {
-            return false
-        }
-
-        val modelFile = model.modelFile
-        if (modelFile == null || !modelFile.exists()) {
-            emitStatus("Piper model missing for ${request.languageCode}. Falling back to Android TTS.")
-            return false
-        }
-
-        val success = synthesizeWithReflection(request, model)
-        if (!success) {
-            emitStatus("Piper reflective synthesis unavailable for current Sherpa API. Falling back.")
-            return false
-        }
-
-        return true
-    }
-
-    override fun shutdown() {
-    }
-
-    private fun isAvailable(): Boolean {
-        if (probeDone) {
-            return available
-        }
-
-        probeDone = true
-        available = try {
-            Class.forName("com.k2fsa.sherpa.onnx.OfflineTts")
-            true
-        } catch (_: Throwable) {
-            false
-        }
-        return available
-    }
-
-    private fun synthesizeWithReflection(request: PendingTtsRequest, model: ResolvedTtsModel): Boolean {
-        return try {
-            val offlineTtsClass = Class.forName("com.k2fsa.sherpa.onnx.OfflineTts")
-            val methods = offlineTtsClass.methods + offlineTtsClass.declaredMethods
-
-            val factoryMethod = methods.firstOrNull { method ->
-                method.name.equals("create", ignoreCase = true) &&
-                    method.parameterTypes.any { type -> type == String::class.java }
-            }
-
-            if (factoryMethod == null) {
-                return false
-            }
-
-            val args = factoryMethod.parameterTypes.map { type ->
-                when {
-                    type == String::class.java -> model.modelFile?.absolutePath ?: ""
-                    type == Boolean::class.javaPrimitiveType || type == Boolean::class.java -> false
-                    type == Int::class.javaPrimitiveType || type == Int::class.java -> 0
-                    type == Float::class.javaPrimitiveType || type == Float::class.java -> 1.0f
-                    else -> null
-                }
-            }.toTypedArray()
-
-            factoryMethod.isAccessible = true
-            val offlineTts = factoryMethod.invoke(null, *args) ?: return false
-
-            val synthesizeMethod = (offlineTts.javaClass.methods + offlineTts.javaClass.declaredMethods)
-                .firstOrNull { method ->
-                    method.name.contains("synth", ignoreCase = true) && method.parameterTypes.isNotEmpty()
-                } ?: return false
-
-            val synthArgs = synthesizeMethod.parameterTypes.mapIndexed { index, type ->
-                when {
-                    index == 0 && type == String::class.java -> request.text
-                    type == Int::class.javaPrimitiveType || type == Int::class.java -> 0
-                    type == Float::class.javaPrimitiveType || type == Float::class.java -> 1.0f
-                    type == Boolean::class.javaPrimitiveType || type == Boolean::class.java -> false
-                    else -> null
-                }
-            }.toTypedArray()
-
-            synthesizeMethod.isAccessible = true
-            synthesizeMethod.invoke(offlineTts, *synthArgs)
-
-            emitEvent(
-                mapOf(
-                    "type" to "tts_started",
-                    "text" to request.text,
-                    "languageCode" to request.languageCode,
-                    "messageId" to request.messageId,
-                    "emergency" to request.emergency,
-                    "backend" to backendName,
-                ),
-            )
-
-            emitEvent(
-                mapOf(
-                    "type" to "audio_started",
-                    "text" to request.text,
-                    "messageId" to request.messageId,
-                    "emergency" to request.emergency,
-                    "backend" to backendName,
-                ),
-            )
-
-            invokeOptional(offlineTts, "close")
-            invokeOptional(offlineTts, "release")
-
-            request.onPlaybackFinished?.invoke()
-            true
-        } catch (error: Throwable) {
-            emitError(request.messageId, "Piper reflective synthesis failed: ${error.message}")
-            false
-        }
-    }
-
-    private fun invokeOptional(target: Any, methodName: String) {
-        val method = (target.javaClass.methods + target.javaClass.declaredMethods).firstOrNull {
-            it.name.equals(methodName, ignoreCase = true) && it.parameterTypes.isEmpty()
-        } ?: return
-
-        try {
-            method.isAccessible = true
-            method.invoke(target)
-        } catch (_: Throwable) {
-        }
-    }
 }
 
 class TtsEngine(
@@ -557,7 +326,6 @@ class TtsEngine(
     private val emitStatus: (String) -> Unit,
 ) {
     private val appContext = context.applicationContext
-    private val modelResolver = TtsModelResolver(appContext, emitStatus)
 
     private val androidBackend = AndroidSystemTtsBackend(
         context = appContext,
@@ -566,40 +334,8 @@ class TtsEngine(
         emitError = ::emitError,
     )
 
-    private val piperBackend = PiperSherpaTtsBackend(
-        modelResolver = modelResolver,
-        emitEvent = emitEvent,
-        emitStatus = emitStatus,
-        emitError = ::emitError,
-    )
-
     fun currentModelSizeMb(languageCode: String): Double? {
-        val model = modelResolver.resolve(languageCode) ?: return null
-        val backend = model.backend.lowercase()
-        if (backend != "piper_sherpa" && backend != "piper" && backend != "sherpa_piper") {
-            return null
-        }
-
-        val files = listOf(
-            model.modelFile,
-            model.tokensFile,
-            model.lexiconFile,
-        )
-
-        var bytes = 0L
-        for (file in files) {
-            if (file != null && file.exists()) {
-                bytes += file.length()
-            }
-        }
-
-        bytes += directorySize(model.dataDir)
-
-        if (bytes <= 0L) {
-            return null
-        }
-
-        return bytes / (1024.0 * 1024.0)
+        return null
     }
 
     fun speak(
@@ -617,25 +353,11 @@ class TtsEngine(
             onPlaybackFinished = onPlaybackFinished,
         )
 
-        val backend = selectBackendFor(languageCode)
-        val spoken = backend.speak(request)
-        if (!spoken && backend !== androidBackend) {
-            androidBackend.speak(request)
-        }
+        androidBackend.speak(request)
     }
 
     fun shutdown() {
-        piperBackend.shutdown()
         androidBackend.shutdown()
-    }
-
-    private fun selectBackendFor(languageCode: String): TtsBackend {
-        val model = modelResolver.resolve(languageCode)
-        val backend = model?.backend?.lowercase() ?: "android_tts"
-        return when (backend) {
-            "piper_sherpa", "piper", "sherpa_piper" -> piperBackend
-            else -> androidBackend
-        }
     }
 
     private fun emitError(messageId: String?, text: String) {
@@ -646,21 +368,5 @@ class TtsEngine(
                 "messageId" to messageId,
             ),
         )
-    }
-
-    private fun directorySize(directory: File?): Long {
-        if (directory == null || !directory.exists()) {
-            return 0L
-        }
-        if (!directory.isDirectory) {
-            return directory.length()
-        }
-
-        var bytes = 0L
-        val children = directory.listFiles() ?: return 0L
-        for (child in children) {
-            bytes += directorySize(child)
-        }
-        return bytes
     }
 }

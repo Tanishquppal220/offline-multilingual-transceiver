@@ -1,10 +1,7 @@
 {
   "languages": {
     "en": {
-      "backend": "piper_sherpa",
-      "model": "assets/models/tts/en/en_US-ljspeech-high.onnx",
-      "tokens": "assets/models/tts/en/tokens.txt",
-      "data": "assets/models/tts/en/espeak-ng-data"
+      "backend": "android_tts"
     },
     "hi": {
       "backend": "android_tts"
@@ -35,4 +32,3 @@
     }
   }
 }
-

@@ -321,10 +321,23 @@ class AppController extends ChangeNotifier {
     final String locStr = _currentLocation != null
         ? ' [GPS: ${_currentLocation!.compactCoordinates}]'
         : '';
-    return sendTypedMessage(
-      'Medical assistance required for ${_userProfile.callsign} (${_userProfile.role})$locStr',
-      emergency: true,
-    );
+    final String callsign = _userProfile.callsign;
+    final String role = _userProfile.role;
+
+    final String messageText = switch (_selectedLanguage.code.toLowerCase()) {
+      'mr' => '$callsign ($role) साठी वैद्यकीय मदत आवश्यक आहे$locStr',
+      'hi' => '$callsign ($role) के लिए चिकित्सा सहायता आवश्यक है$locStr',
+      'gu' => '$callsign ($role) માટે તબીબી સહાય જરૂરી છે$locStr',
+      'ta' => '$callsign ($role) க்கு மருத்துவ உதவி தேவை$locStr',
+      'te' => '$callsign ($role) కొరకు వైద్య సహాయం అవసరం$locStr',
+      'kn' => '$callsign ($role) ಗೆ ವೈದ್ಯಕೀಯ ನೆರವು ಅಗತ್ಯವಿದೆ$locStr',
+      'ml' => '$callsign ($role) ന് അടിയന്തര വൈദ്യസഹായം ആവശ്യമാണ്$locStr',
+      'bn' => '$callsign ($role) এর জন্য জরুরি চিকিৎসা সহায়তা প্রয়োজন$locStr',
+      'or' => '$callsign ($role) ପାଇଁ ଡାକ୍ତରୀ ସହାୟତା ଆବଶ୍ୟକ$locStr',
+      _ => 'Medical assistance required for $callsign ($role)$locStr',
+    };
+
+    return sendTypedMessage(messageText, emergency: true);
   }
 
   void clearHistory() {
