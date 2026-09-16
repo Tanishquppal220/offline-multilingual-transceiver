@@ -727,6 +727,20 @@ class SttEngine(
         return resolvedBytes / (1024.0 * 1024.0)
     }
 
+    fun activeModelName(code: String = languageCode): String {
+        val resolved = sizeResolver.resolve(code)
+        return when {
+            resolved != null && resolved.type.equals("nemo_ctc", ignoreCase = true) ->
+                "NeMo CTC int8 (${code.uppercase()})"
+            resolved != null && resolved.type.equals("transducer", ignoreCase = true) ->
+                "Sherpa Transducer (${code.uppercase()})"
+            resolved != null ->
+                "Sherpa STT (${code.uppercase()})"
+            else ->
+                "Offline STT (${code.uppercase()})"
+        }
+    }
+
     @Synchronized
     fun initialize(languageCode: String) {
         this.languageCode = languageCode

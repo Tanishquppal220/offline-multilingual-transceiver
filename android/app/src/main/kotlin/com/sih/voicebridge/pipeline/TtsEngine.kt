@@ -338,6 +338,11 @@ class TtsEngine(
         return null
     }
 
+    fun activeEngineName(languageCode: String): String {
+        val locale = localeForCode(languageCode)
+        return "Android System TTS (${locale.toLanguageTag()})"
+    }
+
     fun speak(
         text: String,
         languageCode: String,

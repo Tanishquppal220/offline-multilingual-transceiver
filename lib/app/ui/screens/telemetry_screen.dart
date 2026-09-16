@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/benchmark_models.dart';
 import '../../state/app_controller.dart';
 import '../../theme/app_theme.dart';
+import '../widgets/model_status_badge.dart';
 import '../widgets/telemetry_metric_card.dart';
 
 /// Telemetry tab — benchmark metrics dashboard.
@@ -51,7 +52,9 @@ class TelemetryScreen extends StatelessWidget {
                 color: AppColors.tertiary,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            ModelStatusBadge(controller: controller),
+            const SizedBox(height: 14),
             const _SectionTitle('LATENCY (T0..T6)'),
             const SizedBox(height: 8),
             _MetricGrid(

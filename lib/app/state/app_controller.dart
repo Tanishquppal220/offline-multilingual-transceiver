@@ -65,6 +65,10 @@ class AppController extends ChangeNotifier {
   UserProfile _userProfile = UserProfile.initial;
   GpsLocation? _currentLocation;
   bool _profileSetupNeeded = false;
+  String _sttModelName = 'NeMo CTC int8 (EN)';
+  String _ttsModelName = 'Android System TTS (en-US)';
+  bool _isModelLoading = false;
+  String? _modelLoadingMessage;
 
   bool get isConnected => _isConnected;
   bool get isListening => _isListening;
@@ -81,6 +85,10 @@ class AppController extends ChangeNotifier {
   UserProfile get userProfile => _userProfile;
   GpsLocation? get currentLocation => _currentLocation;
   bool get profileSetupNeeded => _profileSetupNeeded;
+  String get sttModelName => _sttModelName;
+  String get ttsModelName => _ttsModelName;
+  bool get isModelLoading => _isModelLoading;
+  String? get modelLoadingMessage => _modelLoadingMessage;
   List<SpeechMessage> get history => List<SpeechMessage>.unmodifiable(_history);
 
   @visibleForTesting
@@ -207,9 +215,14 @@ class AppController extends ChangeNotifier {
 
   Future<void> setLanguage(LanguageOption language) async {
     _selectedLanguage = language;
-    await _nativeBridgeService.setLanguage(language.code);
-    _status = 'Language set to ${language.label}';
+    _isModelLoading = true;
+    _modelLoadingMessage = 'Loading ${language.label} speech model... Please wait 1-2s';
+    _sttModelName = 'NeMo CTC (${language.code.toUpperCase()})';
+    _ttsModelName = 'Android System TTS (${language.code})';
+    _status = 'Loading ${language.label} model...';
     notifyListeners();
+
+    await _nativeBridgeService.setLanguage(language.code);
   }
 
   Future<void> setOperationMode(OperationMode mode) async {
@@ -224,6 +237,11 @@ class AppController extends ChangeNotifier {
   Future<void> startPushToTalk() async {
     final DateTime pressedAt = DateTime.now();
     if (_capturePending) {
+      return;
+    }
+    if (_isModelLoading) {
+      _status = 'Speech model is loading. Please wait 1-2 seconds...';
+      notifyListeners();
       return;
     }
     if (_sttReady == false) {
@@ -597,6 +615,34 @@ class AppController extends ChangeNotifier {
         _latestCaptureMetrics = Map<String, dynamic>.from(
             event.payload ?? const <String, dynamic>{});
         debugPrint('CAPTURE AUDIO: $_latestCaptureMetrics');
+        notifyListeners();
+        break;
+      case NativeEventType.modelLoading:
+        _isModelLoading = true;
+        _modelLoadingMessage = event.payload?['message']?.toString() ??
+            'Loading speech model... Please wait 1-2s';
+        if (event.payload?['sttModel'] != null) {
+          _sttModelName = event.payload!['sttModel'].toString();
+        }
+        if (event.payload?['ttsModel'] != null) {
+          _ttsModelName = event.payload!['ttsModel'].toString();
+        }
+        _status = _modelLoadingMessage!;
+        notifyListeners();
+        break;
+      case NativeEventType.modelReady:
+        _isModelLoading = false;
+        _modelLoadingMessage = null;
+        if (event.payload?['sttModel'] != null) {
+          _sttModelName = event.payload!['sttModel'].toString();
+        }
+        if (event.payload?['ttsModel'] != null) {
+          _ttsModelName = event.payload!['ttsModel'].toString();
+        }
+        if (event.payload?['sttAvailable'] != null) {
+          _sttReady = event.payload!['sttAvailable'] == true;
+        }
+        _status = event.payload?['message']?.toString() ?? 'Speech models ready';
         notifyListeners();
         break;
       case NativeEventType.status:

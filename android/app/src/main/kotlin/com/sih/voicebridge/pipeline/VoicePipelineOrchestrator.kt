@@ -53,6 +53,7 @@ class VoicePipelineOrchestrator(
 
     fun initialize(languageCode: String) {
         if (disposed.get()) return
+        emitModelLoading(languageCode)
         pipelineExecutor.execute {
             if (disposed.get()) return@execute
             try {
@@ -62,15 +63,49 @@ class VoicePipelineOrchestrator(
                 emitStatus(if (sttEngine.recognitionAvailable) "Voice pipelines ready for $languageCode"
                     else "STT unavailable; typed communication and TTS remain available")
             } catch (error: Throwable) {
+                emitModelReady(languageCode, error.message)
                 emitError("Pipeline initialization failed: ${error.message}")
             }
         }
+    }
+
+    private fun emitModelLoading(code: String) {
+        emitEvent(mapOf(
+            "type" to "model_loading",
+            "languageCode" to code,
+            "sttModel" to sttEngine.activeModelName(code),
+            "ttsModel" to ttsEngine.activeEngineName(code),
+            "isLoading" to true,
+            "estimatedSeconds" to 2,
+            "message" to "Loading ${code.uppercase()} speech model... Please wait 1-2s",
+        ))
+    }
+
+    private fun emitModelReady(code: String, errorMessage: String? = null) {
+        val sttModel = if (sttEngine.recognitionAvailable && errorMessage == null) {
+            sttEngine.activeModelName(code)
+        } else {
+            "Offline STT Unavailable"
+        }
+        val ttsModel = ttsEngine.activeEngineName(code)
+
+        emitEvent(mapOf(
+            "type" to "model_ready",
+            "languageCode" to code,
+            "sttModel" to sttModel,
+            "ttsModel" to ttsModel,
+            "sttAvailable" to (sttEngine.recognitionAvailable && errorMessage == null),
+            "isLoading" to false,
+            "message" to if (errorMessage == null) "Speech models active for ${code.uppercase()}"
+                else "Speech model loading failed: $errorMessage",
+        ))
     }
 
     private fun configureLanguage(code: String) {
         languageCode = code
         sttEngine.setLanguage(code)
         resourceMonitor.updateModelSizes(sttEngine.currentModelSizeMb(), ttsEngine.currentModelSizeMb(code))
+        emitModelReady(code)
         emitEvent(mapOf(
             "type" to "stt_ready", "available" to sttEngine.recognitionAvailable,
             "fallback" to !sttEngine.recognitionAvailable, "languageCode" to code,
@@ -81,6 +116,7 @@ class VoicePipelineOrchestrator(
 
     fun setLanguage(languageCode: String) {
         if (disposed.get()) return
+        emitModelLoading(languageCode)
         pipelineExecutor.execute {
             if (disposed.get()) return@execute
             if (captureRequest.get() != null) {
@@ -88,7 +124,10 @@ class VoicePipelineOrchestrator(
                 emitStatus("Language change queued until recording finishes")
             } else {
                 runCatching { configureLanguage(languageCode) }
-                    .onFailure { emitError("Language switch failed: ${it.message}") }
+                    .onFailure {
+                        emitModelReady(languageCode, it.message)
+                        emitError("Language switch failed: ${it.message}")
+                    }
             }
         }
     }

@@ -16,6 +16,8 @@ enum NativeEventType {
   sttReady,
   sttMetrics,
   captureMetrics,
+  modelLoading,
+  modelReady,
   status,
   error,
 }
@@ -40,6 +42,10 @@ NativeEventType nativeEventTypeFromWire(String rawType) {
       return NativeEventType.sttMetrics;
     case 'capture_metrics':
       return NativeEventType.captureMetrics;
+    case 'model_loading':
+      return NativeEventType.modelLoading;
+    case 'model_ready':
+      return NativeEventType.modelReady;
     case 'error':
       return NativeEventType.error;
     default:
